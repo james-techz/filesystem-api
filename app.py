@@ -41,16 +41,15 @@ class Directory(Resource):
 
 class File(Resource):
 
-    def _read_file(self, path):
-        with open(path, 'rb') as f:
-            return b64encode(f.read()).decode('utf-8')
+    # def _read_file(self, path):
+    #     with open(path, 'rb') as f:
+    #         return b64encode(f.read()).decode('utf-8')
 
     def get(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
         response = {
             'path': path,
             'type': ITEMTYPE.FILE,
-            'content': self._read_file(full_path)
         }
         return response
     
