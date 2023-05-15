@@ -1,0 +1,11 @@
+version: ''
+
+services:
+  app:
+    image: jamestechz/filesystem-api:v0.4
+    ports:
+    - 5000:5000
+    volumes:
+    - type: bind
+      source: /home/ec2-user/_files
+      target: /app/_files
