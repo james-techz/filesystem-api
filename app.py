@@ -63,11 +63,8 @@ class File(Resource):
     @os_exception_handle
     def delete(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
-        try:
-            os.remove(full_path)
-            return None, 204
-        except Exception as e:
-            return e
+        os.remove(full_path)
+        return None, 204
         
     @os_exception_handle
     def patch(self, path):
@@ -78,11 +75,8 @@ class File(Resource):
             return File().get(path)
 
         new_path = os.path.sep.join([DATA_DIR, req['new_path']])
-        try:
-            os.rename(full_path, new_path)
-            return File().get(req['new_path'])
-        except Exception as e:
-            return e
+        os.rename(full_path, new_path)
+        return File().get(req['new_path'])
 
     @os_exception_handle
     def post(self, path):
