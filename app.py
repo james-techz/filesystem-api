@@ -79,23 +79,25 @@ class File(Resource):
         full_path = os.path.sep.join([DATA_DIR, path])
         req = request.json
 
-        # create new file by posting content
-        if request.args['action'] == None or request.args['action'] == 'upload':
-            if req['content'] == None:
-                return None, 400
-            try:
+        try:
+            # create new file by posting content
+            if request.args['action'] == None or request.args['action'] == 'upload':
+                if req['content'] == None:
+                    return None, 400
+
                 with open(full_path, 'w') as f:
                     f.write(req['content'])
                 return File().get(path)
-            except Exception as e:
-                return e
-            
-        # create new file by scraping from direct URL
-        elif request.args['action'] == 'scrape':
-            if req['url'] == None:
-                return None, 400
-            try:
+                
+            # create new file by scraping from direct URL
+            elif request.args['action'] == 'scrape':
+                if req['url'] == None:
+                    return None, 400
+
                 response = urlopen(req['url'])
+                if response.status not in [200]:
+                    return {'error_message': f'{req["url"]}: {response.status} - {response.reason}'}
+
                 CHUNK = 16 * 1024
                 with open(full_path, 'wb') as f:
                     while True:
@@ -104,37 +106,34 @@ class File(Resource):
                             break
                         f.write(chunk)
                 return File().get(path)
-            except Exception as e:
-                return e
-            
-        # create new file by zip multiple files
-        elif request.args['action'] == 'zip':
-            if req['files'] == None or not isinstance(req['files'], list):
-                return None, 400
-            try:
-                with ZipFile(full_path, 'w') as zipObj:
+                
+            # create new file by zip multiple files
+            elif request.args['action'] == 'zip':
+                if req['files'] == None or not isinstance(req['files'], list):
+                    return None, 400
+                
+                with ZipFile(full_path, 'x') as zipObj:
                     for _file_path in req['files']:
                         zipObj.write(os.path.sep.join([DATA_DIR, _file_path]))
                 return File().get(path) 
-            except Exception as e:
-                return e
-            
-        # create new file by concat multiple files
-        elif request.args['action'] == 'concat':
-            if req['files'] == None or not isinstance(req['files'], list):
-                return None, 400
-            try:
+
+            # create new file by concat multiple files
+            elif request.args['action'] == 'concat':
+                if req['files'] == None or not isinstance(req['files'], list):
+                    return None, 400
+                
                 with open(full_path, 'wb') as target_f:
                     for _file_path in req['files']:
                         with open(os.path.sep.join([DATA_DIR, _file_path]), 'rb') as src_f:
                             target_f.write(src_f.read())
                 resp = File().get(path) 
                 return resp
-            except Exception as e:
-                return e
-        else:
-            return None, 400
+                
+            else:
+                return None, 400
         
+        except OSError as e:
+                return {'error_message': f'{e.filename}: {e.strerror}', }, 400
 
 
 
@@ -147,5 +146,5 @@ api.add_resource(File, '/file/<path:path>')
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', threaded=True, port=5000, debug=False)
+    app.run(host='0.0.0.0', threaded=True, port=5000, debug=True)
 
