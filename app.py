@@ -59,7 +59,7 @@ class File(Resource):
             os.remove(full_path)
             return None, 204
         except Exception as e:
-            return e.args
+            return e
         
     def patch(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
@@ -73,7 +73,7 @@ class File(Resource):
             os.rename(full_path, new_path)
             return File().get(req['new_path'])
         except Exception as e:
-            return e.args
+            return e
 
     def post(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
@@ -88,7 +88,7 @@ class File(Resource):
                     f.write(req['content'])
                 return File().get(path)
             except Exception as e:
-                return e.args
+                return e
             
         # create new file by scraping from direct URL
         elif request.args['action'] == 'scrape':
@@ -105,7 +105,7 @@ class File(Resource):
                         f.write(chunk)
                 return File().get(path)
             except Exception as e:
-                return e.args
+                return e
             
         # create new file by zip multiple files
         elif request.args['action'] == 'zip':
@@ -117,7 +117,7 @@ class File(Resource):
                         zipObj.write(os.path.sep.join([DATA_DIR, _file_path]))
                 return File().get(path) 
             except Exception as e:
-                return e.args
+                return e
             
         # create new file by concat multiple files
         elif request.args['action'] == 'concat':
@@ -131,7 +131,7 @@ class File(Resource):
                 resp = File().get(path) 
                 return resp
             except Exception as e:
-                return e.args
+                return e
         else:
             return None, 400
         
