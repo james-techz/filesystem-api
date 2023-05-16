@@ -21,7 +21,8 @@ def os_exception_handle(f):
         try:
             return f(*args, **kwargs)
         except OSError as e:
-            return {'error_message': f'{e.filename}: {e.strerror}', }, 400
+            trimmed_filename = e.filename.split(os.path.sep)[1:]
+            return {'error_message': f'{trimmed_filename}: {e.strerror}', }, 400
     return _inner_func
 
 
