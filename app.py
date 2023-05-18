@@ -6,15 +6,21 @@ import os
 from base64 import b64encode
 from zipfile import ZipFile
 from urllib.request import urlopen
+import jwt
 
 app = Flask(__name__)
 api = Api(app)
 
 DATA_DIR = '_files'
-DEBUG = os.environ.get("DEBUG", False)
+DEBUG = os.environ.get('DEBUG', False)
+SECRET = os.environ.get('SECRET', None)
+ADMIN_USER = os.environ.get('ADMIN_USER', None)
+ADMIN_PASSWD = os.environ.get('ADMIN_PASSWD', None)
+JWT_ALGO = 'HS256'
+
 class ITEMTYPE:
-    DIRECTORY = "directory"
-    FILE = "file"
+    DIRECTORY = 'directory'
+    FILE = 'file'
 
 def os_exception_handle(f):
     def _inner_func(*args, **kwargs):
@@ -25,9 +31,26 @@ def os_exception_handle(f):
             return {'error_message': f'{trimmed_filename}: {e.strerror}', }, 400
     return _inner_func
 
+def require_token(f):
+    def _inner_func(*args, **kwargs):
+        token = request.headers.get('token', None)
+        if token is None:
+            return 'Header token missing', 401
+        else:
+            options = {
+                'require': ['ADMIN_USER', 'ADMIN_PASSWD']
+            }
+            try:
+                entity = jwt.decode(token, SECRET, algorithms=JWT_ALGO, options=options)
+                if entity['ADMIN_USER'] == ADMIN_USER and entity['ADMIN_PASSWD'] == ADMIN_PASSWD:
+                    return f(*args, **kwargs)
+                else:
+                    return 'Invalid token', 401
+            except jwt.exceptions.InvalidTokenError:
+                return 'Invalid token', 401
+    return _inner_func
 
 class Directory(Resource):
-
     def _scan_dir(self, path):
         files = []
         dirs = []
@@ -39,6 +62,7 @@ class Directory(Resource):
                     dirs.append(item.name)
         return {'dirs': dirs, 'files': files}
 
+    @require_token
     @os_exception_handle
     def get(self, path = ''):
         full_path = os.path.sep.join([DATA_DIR, path])
@@ -135,10 +159,16 @@ class File(Resource):
         else:
             return None, 400
         
+def initialize():
+    # Generate token
+    if ADMIN_USER is None or ADMIN_PASSWD is None or SECRET is None:
+        print('[ERROR]: Information to generate token is missing')
+        os.abort()
+    else:
+        token = jwt.encode({'ADMIN_USER': ADMIN_USER, 'ADMIN_PASSWD': ADMIN_PASSWD}, SECRET, algorithm=JWT_ALGO)
+        print(f'[IMPORTANT]: Token: {token}')
 
-
-
-# add wrapper: check file/dir existence,  check is file, is dir
+initialize()
 
 
 api.add_resource(Directory, '/dir/', '/dir/<path:path>')
