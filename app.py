@@ -75,7 +75,7 @@ class Directory(Resource):
 
 
 class File(Resource):
-
+    @require_token
     def get(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
         response = {
@@ -84,12 +84,14 @@ class File(Resource):
         }
         return response
     
+    @require_token
     @os_exception_handle
     def delete(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
         os.remove(full_path)
         return None, 204
         
+    @require_token
     @os_exception_handle
     def patch(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
@@ -102,6 +104,7 @@ class File(Resource):
         os.rename(full_path, new_path)
         return File().get(req['new_path'])
 
+    @require_token
     @os_exception_handle
     def post(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
