@@ -1,6 +1,6 @@
 # Shamelessly copied from http://flask.pocoo.org/docs/quickstart/
 
-from flask import Flask, request
+from flask import Flask, request, Response
 from flask_restful import Resource, Api, fields, marshal_with
 import os 
 from base64 import b64encode
@@ -13,6 +13,7 @@ api = Api(app)
 
 DATA_DIR = '_files'
 DEBUG = os.environ.get('DEBUG', False)
+READ_CHUNK_BYTE = 4096
 SECRET = os.environ.get('SECRET', None)
 ADMIN_USER = os.environ.get('ADMIN_USER', None)
 ADMIN_PASSWD = os.environ.get('ADMIN_PASSWD', None)
@@ -73,16 +74,29 @@ class Directory(Resource):
         }
         return response
 
-
 class File(Resource):
+
+    def stream_file_content(self, file_path):
+        with open(file_path, 'rb') as f:
+            while True:
+                buffer = f.read(READ_CHUNK_BYTE)
+                yield buffer
+                if len(buffer) < READ_CHUNK_BYTE:
+                    break
+
     @require_token
+    @os_exception_handle
     def get(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
-        response = {
-            'path': path,
-            'type': ITEMTYPE.FILE,
-        }
-        return response
+        req_type = request.args['type'] if 'type' in request.args else None
+        if req_type == 'content':
+            return Response(self.stream_file_content(full_path), mimetype='application/octet-stream')
+        else:
+            response = {
+                'path': path,
+                'type': ITEMTYPE.FILE,
+            }
+            return response
     
     @require_token
     @os_exception_handle
