@@ -122,6 +122,8 @@ class File(Resource):
     @os_exception_handle
     def post(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
+        # create intermediate directories if needed
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
         req = request.json
 
         # create new file by posting content
