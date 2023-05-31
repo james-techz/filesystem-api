@@ -1,11 +1,11 @@
 # Shamelessly copied from http://flask.pocoo.org/docs/quickstart/
 
 from flask import Flask, request, Response
-from flask_restful import Resource, Api, fields, marshal_with
+from flask_restful import Resource, Api
 import os 
-from base64 import b64encode
 from zipfile import ZipFile
 from urllib.request import urlopen
+from urllib.error import HTTPError
 import jwt
 
 app = Flask(__name__)
@@ -18,6 +18,7 @@ SECRET = os.environ.get('SECRET', None)
 ADMIN_USER = os.environ.get('ADMIN_USER', None)
 ADMIN_PASSWD = os.environ.get('ADMIN_PASSWD', None)
 JWT_ALGO = 'HS256'
+FORBIDDEN_DIR = os.path.sep.join(['_files', '_public'])
 
 class ITEMTYPE:
     DIRECTORY = 'directory'
@@ -27,6 +28,8 @@ def os_exception_handle(f):
     def _inner_func(*args, **kwargs):
         try:
             return f(*args, **kwargs)
+        except HTTPError as e:
+            return {'error_message': f'{e.filename}: {e.code}: {e.msg}', }, 400
         except OSError as e:
             trimmed_filename = os.path.sep.join(e.filename.split(os.path.sep)[1:])
             return {'error_message': f'{trimmed_filename}: {e.strerror}', }, 400
@@ -74,6 +77,66 @@ class Directory(Resource):
         }
         return response
 
+    @require_token
+    @os_exception_handle
+    def post(self, path = ''):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        os.makedirs(full_path, exist_ok=True)
+        req = request.json
+
+        if req['url'] == None:
+            return None, 400
+
+        # send GET to the target URL
+        response = urlopen(req['url'])
+        if response.status not in [200]:
+            return {'error_message': f'{req["url"]}: {response.status} - {response.reason}'}
+
+        # read / parse the target website to get links
+        html = response.read()
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, 'html.parser')
+        links = soup.find_all('a')
+        SKIP_LINKS = ['/', '../', './', '..', '.', '?C=N;O=D', '']
+        ONLY_SUFFIX = '.html'
+
+        # construct link lists
+        if ONLY_SUFFIX != '':
+            filtered_links = [link['href'] for link in links if str(link['href']).endswith(ONLY_SUFFIX) ]
+        else:
+            filtered_links = [link['href'] for link in links if link['href'] not in SKIP_LINKS ]
+
+        filtered_full_links = [f"{req['url']}/{link}" for link in filtered_links]
+
+        def exception_request(request, exception):
+            print(f"{request.url}: {exception}")
+
+        # smultaneously get the links to speed up
+        import grequests
+        import requests_cache
+        session = requests_cache.CachedSession(cache_name='my_cache')
+        results = grequests.map(
+            (grequests.get(u, session=session, timeout=10) for u in filtered_full_links),
+            exception_handler=exception_request,
+            size=10,
+        )
+
+        # construct file content lists
+        file_contents = [r.text if r is not None else '' for r in results]
+        
+        # write the file content to the directory
+        for (name, content) in zip(filtered_links, file_contents):
+            full_name = os.path.sep.join([full_path, name])
+            with open(full_name, 'w') as f:
+                f.write(content)
+                
+        return {
+            'path': path,
+            'type': ITEMTYPE.DIRECTORY,
+            'children': self._scan_dir(full_path)
+        }
+
+
 class File(Resource):
 
     def stream_file_content(self, file_path):
@@ -102,6 +165,8 @@ class File(Resource):
     @os_exception_handle
     def delete(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
+        if full_path == FORBIDDEN_DIR:
+            return None, 403
         os.remove(full_path)
         return None, 204
         
@@ -109,7 +174,9 @@ class File(Resource):
     @os_exception_handle
     def patch(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
-
+        if full_path == FORBIDDEN_DIR:
+            return None, 403
+        
         req = request.json
         if req['new_path'] == None:
             return File().get(path)
@@ -124,6 +191,7 @@ class File(Resource):
         full_path = os.path.sep.join([DATA_DIR, path])
         # create intermediate directories if needed
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
         req = request.json
 
         # create new file by posting content

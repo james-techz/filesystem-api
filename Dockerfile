@@ -7,17 +7,20 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Turns off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
 
+# Install nginx to serve public static files
+RUN apk add nginx
+
 # Install pip requirements
 COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
 
-WORKDIR /app
+COPY ./nginx_default.conf /etc/nginx/http.d/default.conf
 COPY . /app
-
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 1000 --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
+# RUN adduser -u 1000 --disabled-password --gecos "" appuser && chown -R appuser /app
+WORKDIR /app
 EXPOSE 5000
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD gunicorn -b 0.0.0.0:5000 -w 4 --threads 128 --access-logfile - --error-logfile - app:app
+RUN chmod u+x start.sh
+CMD ./start.sh
