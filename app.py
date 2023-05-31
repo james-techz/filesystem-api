@@ -7,6 +7,7 @@ from zipfile import ZipFile
 from urllib.request import urlopen
 from urllib.error import HTTPError
 import jwt
+from pathlib import Path
 
 app = Flask(__name__)
 api = Api(app)
@@ -136,6 +137,25 @@ class Directory(Resource):
             'children': self._scan_dir(full_path)
         }
 
+    @require_token
+    @os_exception_handle
+    def delete(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        if full_path.replace(os.path.sep, '') == FORBIDDEN_DIR.replace(os.path.sep, ''):
+            return None, 403
+        
+        def rmdir(directory):
+            directory = Path(directory)
+            for item in directory.iterdir():
+                if item.is_dir():
+                    rmdir(item)
+                else:
+                    item.unlink()
+            directory.rmdir()
+        
+        rmdir(full_path)
+
+        return None, 204
 
 class File(Resource):
 
@@ -165,7 +185,7 @@ class File(Resource):
     @os_exception_handle
     def delete(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
-        if full_path == FORBIDDEN_DIR:
+        if full_path.replace(os.path.sep, '') == FORBIDDEN_DIR.replace(os.path.sep, ''):
             return None, 403
         os.remove(full_path)
         return None, 204
