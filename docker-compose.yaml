@@ -1,8 +1,8 @@
-version: '3.1'
+version: '3.2'
 
 services:
   app:
-    image: jamestechz/filesystem-api:v0.7
+    image: jamestechz/filesystem-api:v1.1
     ports:
     - 5000:5000
     environment:
@@ -12,4 +12,5 @@ services:
     volumes:
     - type: bind
       source: /home/ec2-user/_files
+      # source: /home/tungvs/upwork/chris/filesystem-api/_files
       target: /app/_files

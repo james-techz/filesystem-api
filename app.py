@@ -1,5 +1,5 @@
 # Shamelessly copied from http://flask.pocoo.org/docs/quickstart/
-
+import gevent.monkey; gevent.monkey.patch_all(thread=False)
 from flask import Flask, request, Response
 from flask_restful import Resource, Api
 import os 
@@ -8,18 +8,27 @@ from urllib.request import urlopen
 from urllib.error import HTTPError
 import jwt
 from pathlib import Path
+from bs4 import BeautifulSoup
+import grequests
+import requests_cache
+from pywebcopy import save_webpage
+import requests
+import ffmpeg
 
 app = Flask(__name__)
 api = Api(app)
 
 DATA_DIR = '_files'
+PUBLIC_SUBDIR = '_public'
 DEBUG = os.environ.get('DEBUG', False)
 READ_CHUNK_BYTE = 4096
 SECRET = os.environ.get('SECRET', None)
 ADMIN_USER = os.environ.get('ADMIN_USER', None)
 ADMIN_PASSWD = os.environ.get('ADMIN_PASSWD', None)
 JWT_ALGO = 'HS256'
-FORBIDDEN_DIR = os.path.sep.join(['_files', '_public'])
+
+
+FORBIDDEN_DIR = os.path.sep.join([DATA_DIR, PUBLIC_SUBDIR]),
 
 class ITEMTYPE:
     DIRECTORY = 'directory'
@@ -65,37 +74,23 @@ class Directory(Resource):
                     files.append(item.name)
                 elif item.is_dir():
                     dirs.append(item.name)
-        return {'dirs': dirs, 'files': files}
+        return {'dirs': sorted(dirs), 'files': sorted(files)}
 
-    @require_token
-    @os_exception_handle
-    def get(self, path = ''):
-        full_path = os.path.sep.join([DATA_DIR, path])
-        response = {
-            'path': path,
-            'type': ITEMTYPE.DIRECTORY,
-            'children': self._scan_dir(full_path)
-        }
-        return response
-
-    @require_token
-    @os_exception_handle
-    def post(self, path = ''):
+    
+    def _create_dir_by_crawl(self, path):
+        if request.json['url'] == None:
+            return None, 400
+        url = request.json['url']
         full_path = os.path.sep.join([DATA_DIR, path])
         os.makedirs(full_path, exist_ok=True)
-        req = request.json
-
-        if req['url'] == None:
-            return None, 400
 
         # send GET to the target URL
-        response = urlopen(req['url'])
+        response = urlopen(url)
         if response.status not in [200]:
-            return {'error_message': f'{req["url"]}: {response.status} - {response.reason}'}
+            return {'error_message': f'{url}: {response.status} - {response.reason}'}
 
         # read / parse the target website to get links
         html = response.read()
-        from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
         links = soup.find_all('a')
         SKIP_LINKS = ['/', '../', './', '..', '.', '?C=N;O=D', '']
@@ -107,14 +102,12 @@ class Directory(Resource):
         else:
             filtered_links = [link['href'] for link in links if link['href'] not in SKIP_LINKS ]
 
-        filtered_full_links = [f"{req['url']}/{link}" for link in filtered_links]
+        filtered_full_links = [f"{url}/{link}" for link in filtered_links]
 
         def exception_request(request, exception):
             print(f"{request.url}: {exception}")
 
         # smultaneously get the links to speed up
-        import grequests
-        import requests_cache
         session = requests_cache.CachedSession(cache_name='my_cache')
         results = grequests.map(
             (grequests.get(u, session=session, timeout=10) for u in filtered_full_links),
@@ -137,13 +130,127 @@ class Directory(Resource):
             'children': self._scan_dir(full_path)
         }
 
+
+    def _create_dir_by_clone(self, path):
+        if request.json['url'] == None:
+            return None, 400
+        url = request.json['url']
+        full_path = os.path.sep.join([DATA_DIR, path])
+        os.makedirs(full_path, exist_ok=True)
+        # send GET to the target URL to see if we've got invalid response
+        session_obj = requests.Session()
+        response = session_obj.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        if response.status_code not in [200]:
+            return {'error_message_clone': f'{url}: {response.status_code} - {response.reason}'}
+        # else, we can start to save the page
+        project_folder = os.path.sep.join(full_path.split(os.path.sep)[:-1]) + os.path.sep
+        project_name = full_path.split(os.path.sep)[-1]
+        save_webpage(
+              url=url,
+              project_folder=project_folder,
+              project_name=project_name,
+              bypass_robots=True,
+              debug=True,
+              open_in_browser=False,
+              delay=None,
+              threaded=False,
+        )
+        return self.get(path)
+
+    def _create_dir_by_split(self, path):
+        if request.json['file_path'] == None or request.json['size_limit'] == None:
+            return None, 400
+        full_path = os.path.sep.join([DATA_DIR, path])
+        os.makedirs(full_path, exist_ok=True)
+        # extract size_limit, file_path, file_name, file extension
+        file_path = request.json['file_path']
+        file_name = file_path.split(os.path.sep)[-1]
+        size_limit = request.json['size_limit']
+        [shortname, ext] = file_name.split('.')
+        ext = '' if ext is None else f'.{ext}'
+        # start reading and writing chunks
+        with open(file_path, 'r') as f:
+            counter = 1
+            while True:
+                chunk = f.read(size_limit)
+                if len(chunk) == 0:
+                    break
+                with open(os.path.sep.join([full_path, f'{shortname}-{"%04d" % counter}{ext}']), 'w') as chunk_file:
+                    chunk_file.write(chunk)
+                if len(chunk) < size_limit:
+                    break
+                counter += 1
+        return self.get(path)
+
+    def _create_dir_by_extract_video(self, path):
+        if request.json['file_path'] == None or request.json['time_interval'] == None:
+            return None, 400
+        full_path = os.path.sep.join([DATA_DIR, path])
+        os.makedirs(full_path, exist_ok=True)
+        # extract time_interval, file_path, file_name, file extension
+        file_path = request.json['file_path']
+        file_name = file_path.split(os.path.sep)[-1]
+        time_interval = request.json['time_interval']
+        shortname = file_name.split('.')[0]
+        ext = '.jpg'
+        # start reading the video and extracting metadata
+        import subprocess
+        import json
+        result = subprocess.run(['ffprobe', '-show_format', '-show_streams', '-of', 'json', file_path], stdout=subprocess.PIPE)
+        probe = json.loads(result.stdout)
+        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+        duration = float(video_stream['duration'])
+        nb_frames = float(video_stream['nb_frames'])
+        # calculate frame index to extract
+        parts = int(duration // time_interval)
+        frame_interval = int(nb_frames // parts)
+        frame_interval_list = [(i + 1) * frame_interval for i in range(parts)]
+        for (index, frame_index_end) in enumerate(frame_interval_list):
+            subprocess.run([
+                'ffmpeg', '-i', file_path, 
+                '-vf', f'select=eq(n\,{frame_index_end})', 
+                '-vframes', '1', 
+                os.path.sep.join([full_path, f'{shortname}-{"%04d" % index}{ext}']),
+                '-y'
+                ], stdout=subprocess.PIPE)
+        
+        return self.get(path)
+
+    @require_token
+    @os_exception_handle
+    def get(self, path = ''):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        response = {
+            'path': path,
+            'type': ITEMTYPE.DIRECTORY,
+            'children': self._scan_dir(full_path)
+        }
+        return response
+
+    @require_token
+    @os_exception_handle
+    def post(self, path = ''):
+        action = request.args['action'] if 'action' in request.args else None
+        if action is None:
+            return {f'error_message': 'action must be specified'}, 400
+        if action == 'clone':
+            return self._create_dir_by_clone(path)
+        elif action == 'crawl':
+            return self._create_dir_by_crawl(path)
+        elif action == 'split':
+            return self._create_dir_by_split(path)
+        elif action == 'video_extract':
+            return self._create_dir_by_extract_video(path)
+        else:
+            return {f'error_message': 'action not supported: {action}'}, 400
+
+        
     @require_token
     @os_exception_handle
     def delete(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
         if full_path.replace(os.path.sep, '') == FORBIDDEN_DIR.replace(os.path.sep, ''):
             return None, 403
-        
         def rmdir(directory):
             directory = Path(directory)
             for item in directory.iterdir():
@@ -152,9 +259,7 @@ class Directory(Resource):
                 else:
                     item.unlink()
             directory.rmdir()
-        
         rmdir(full_path)
-
         return None, 204
 
 class File(Resource):
@@ -211,27 +316,21 @@ class File(Resource):
         full_path = os.path.sep.join([DATA_DIR, path])
         # create intermediate directories if needed
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        
         req = request.json
-
         # create new file by posting content
         if request.args['action'] == None or request.args['action'] == 'upload':
             if req['content'] == None:
                 return None, 400
-
             with open(full_path, 'w') as f:
                 f.write(req['content'])
             return File().get(path)
-            
         # create new file by scraping from direct URL
         elif request.args['action'] == 'scrape':
             if req['url'] == None:
                 return None, 400
-
             response = urlopen(req['url'])
             if response.status not in [200]:
                 return {'error_message': f'{req["url"]}: {response.status} - {response.reason}'}
-
             CHUNK = 16 * 1024
             with open(full_path, 'wb') as f:
                 while True:
@@ -240,29 +339,24 @@ class File(Resource):
                         break
                     f.write(chunk)
             return File().get(path)
-            
         # create new file by zip multiple files
         elif request.args['action'] == 'zip':
             if req['files'] == None or not isinstance(req['files'], list):
                 return None, 400
-            
             with ZipFile(full_path, 'x') as zipObj:
                 for _file_path in req['files']:
                     zipObj.write(os.path.sep.join([DATA_DIR, _file_path]))
             return File().get(path) 
-
         # create new file by concat multiple files
         elif request.args['action'] == 'concat':
             if req['files'] == None or not isinstance(req['files'], list):
                 return None, 400
-            
             with open(full_path, 'wb') as target_f:
                 for _file_path in req['files']:
                     with open(os.path.sep.join([DATA_DIR, _file_path]), 'rb') as src_f:
                         target_f.write(src_f.read())
             resp = File().get(path) 
             return resp
-            
         else:
             return None, 400
         
@@ -275,6 +369,7 @@ def initialize():
         token = jwt.encode({'ADMIN_USER': ADMIN_USER, 'ADMIN_PASSWD': ADMIN_PASSWD}, SECRET, algorithm=JWT_ALGO)
         print(f'[IMPORTANT]: Token: {token}')
 
+
 initialize()
 
 
@@ -282,7 +377,6 @@ api.add_resource(Directory, '/dir/', '/dir/<path:path>')
 api.add_resource(File, '/file/<path:path>')
 
 
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', threaded=True, port=5000, debug=DEBUG)
+    app.run(host='0.0.0.0', threaded=False, port=5000, debug=DEBUG)
 

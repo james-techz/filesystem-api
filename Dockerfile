@@ -1,5 +1,5 @@
 # For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3.9.16-alpine3.17 
+FROM python:3.9.16-slim-buster
 
 # Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -8,8 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Install nginx to serve public static files
-RUN apk add nginx
-
+RUN apt update -y
+RUN apt install nginx -y
+RUN apt install ffmpeg -y
 # Install pip requirements
 COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
