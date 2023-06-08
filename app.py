@@ -1,5 +1,4 @@
 # Shamelessly copied from http://flask.pocoo.org/docs/quickstart/
-import gevent.monkey; gevent.monkey.patch_all(thread=False)
 from flask import Flask, request, Response
 from flask_restful import Resource, Api
 import os 
@@ -13,7 +12,7 @@ import grequests
 import requests_cache
 from pywebcopy import save_webpage
 import requests
-import ffmpeg
+import cv2
 
 app = Flask(__name__)
 api = Api(app)
@@ -190,31 +189,31 @@ class Directory(Resource):
         # extract time_interval, file_path, file_name, file extension
         file_path = request.json['file_path']
         file_name = file_path.split(os.path.sep)[-1]
-        time_interval = request.json['time_interval']
+        time_interval = float(request.json['time_interval'])
         shortname = file_name.split('.')[0]
         ext = '.jpg'
-        # start reading the video and extracting metadata
-        import subprocess
-        import json
-        result = subprocess.run(['ffprobe', '-show_format', '-show_streams', '-of', 'json', file_path], stdout=subprocess.PIPE)
-        probe = json.loads(result.stdout)
-        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-        duration = float(video_stream['duration'])
-        nb_frames = float(video_stream['nb_frames'])
-        # calculate frame index to extract
-        parts = int(duration // time_interval)
-        frame_interval = int(nb_frames // parts)
-        frame_interval_list = [(i + 1) * frame_interval for i in range(parts)]
-        for (index, frame_index_end) in enumerate(frame_interval_list):
-            subprocess.run([
-                'ffmpeg', '-i', file_path, 
-                '-vf', f'select=eq(n\,{frame_index_end})', 
-                '-vframes', '1', 
-                os.path.sep.join([full_path, f'{shortname}-{"%04d" % index}{ext}']),
-                '-y'
-                ], stdout=subprocess.PIPE)
-        
+        # read video file using cv2
+        video = cv2.VideoCapture(file_path)
+        if not video.isOpened():
+            return {f'error_message': 'cannot read video file {file_path}'}, 500
+        # calculate frame indexes to capture
+        fps = video.get(cv2.CAP_PROP_FPS)
+        nr_frames = video.get(cv2.CAP_PROP_FRAME_COUNT)
+        frame_interval = int(fps * time_interval)
+        max_frame_interval = int(nr_frames // frame_interval)
+        frame_interval_list = [i * frame_interval for i in range(max_frame_interval)]
+        # capture and save frames to files
+        for (index, frame_index) in enumerate(frame_interval_list):
+            video.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            ret, frame = video.read()
+            if not ret:
+                print(f'Failed to read frame: {frame_index}')
+            full_frame_filename = os.path.sep.join([full_path, f'{shortname}-{"%04d" % index}{ext}'])
+            cv2.imwrite(full_frame_filename, frame)
+
         return self.get(path)
+
+
 
     @require_token
     @os_exception_handle
@@ -378,5 +377,5 @@ api.add_resource(File, '/file/<path:path>')
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', threaded=False, port=5000, debug=DEBUG)
+    app.run(host='0.0.0.0', port=5000, debug=DEBUG)
 

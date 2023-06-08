@@ -9,13 +9,12 @@ ENV PYTHONUNBUFFERED=1
 
 # Install nginx to serve public static files
 RUN apt update -y
-RUN apt install nginx -y
-RUN apt install ffmpeg -y
+RUN apt install nginx net-tools procps vim -y
 # Install pip requirements
 COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
 
-COPY ./nginx_default.conf /etc/nginx/http.d/default.conf
+COPY ./nginx_default.conf /etc/nginx/conf.d/default.conf
 COPY . /app
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
