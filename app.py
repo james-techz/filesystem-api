@@ -13,6 +13,7 @@ import requests_cache
 from pywebcopy import save_webpage
 import requests
 import cv2
+import youtube_dl
 
 app = Flask(__name__)
 api = Api(app)
@@ -309,53 +310,88 @@ class File(Resource):
         os.rename(full_path, new_path)
         return File().get(req['new_path'])
 
+    
+    def _create_file_by_upload(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        if request.json['content'] == None:
+            return None, 400
+        with open(full_path, 'w') as f:
+            f.write(request.json['content'])
+        return File().get(path)
+    
+    def _create_file_by_scrape(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        if 'url' not in request.json:
+            return None, 400
+        url = request.json['url']
+        response = urlopen(url)
+        if response.status not in [200]:
+            return {'error_message': f'{url}: {response.status} - {response.reason}'}
+        CHUNK = 16 * 1024
+        with open(full_path, 'wb') as f:
+            while True:
+                chunk = response.read(CHUNK)
+                if not chunk:
+                    break
+                f.write(chunk)
+        return File().get(path)
+
+    def _create_file_by_zip(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        if 'files' not in request.json:
+            return None, 400
+        files = request.json['files']
+        if not isinstance(files, list):
+            return None, 400
+        with ZipFile(full_path, 'x') as zipObj:
+            for _file_path in files:
+                zipObj.write(os.path.sep.join([DATA_DIR, _file_path]))
+        return File().get(path) 
+    
+    def _create_file_by_text_concat(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        if 'files' not in request.json:
+            return None, 400
+        files = request.json['files']
+        if not isinstance(files, list):
+            return None, 400
+        with open(full_path, 'wb') as target_f:
+            for _file_path in files:
+                with open(os.path.sep.join([DATA_DIR, _file_path]), 'rb') as src_f:
+                    target_f.write(src_f.read())
+        return File().get(path) 
+    
+    # def _create_file_by_youtube_download(self, path):
+    #     full_path = os.path.sep.join([DATA_DIR, path])
+    #     if 'url' not in request.json:
+    #         return None, 400
+    #     url = request.json['url']
+    #     ydl_opts = {'outtmpl': full_path}
+    #     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+    #         ydl.download([url])
+    #     return File().get(path)  
+
+
     @require_token
     @os_exception_handle
     def post(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
         # create intermediate directories if needed
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        req = request.json
         # create new file by posting content
         if request.args['action'] == None or request.args['action'] == 'upload':
-            if req['content'] == None:
-                return None, 400
-            with open(full_path, 'w') as f:
-                f.write(req['content'])
-            return File().get(path)
+            return self._create_file_by_upload(path)
         # create new file by scraping from direct URL
         elif request.args['action'] == 'scrape':
-            if req['url'] == None:
-                return None, 400
-            response = urlopen(req['url'])
-            if response.status not in [200]:
-                return {'error_message': f'{req["url"]}: {response.status} - {response.reason}'}
-            CHUNK = 16 * 1024
-            with open(full_path, 'wb') as f:
-                while True:
-                    chunk = response.read(CHUNK)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-            return File().get(path)
+            return self._create_file_by_scrape(path)
         # create new file by zip multiple files
         elif request.args['action'] == 'zip':
-            if req['files'] == None or not isinstance(req['files'], list):
-                return None, 400
-            with ZipFile(full_path, 'x') as zipObj:
-                for _file_path in req['files']:
-                    zipObj.write(os.path.sep.join([DATA_DIR, _file_path]))
-            return File().get(path) 
+            return self._create_file_by_zip(path)
         # create new file by concat multiple files
         elif request.args['action'] == 'concat':
-            if req['files'] == None or not isinstance(req['files'], list):
-                return None, 400
-            with open(full_path, 'wb') as target_f:
-                for _file_path in req['files']:
-                    with open(os.path.sep.join([DATA_DIR, _file_path]), 'rb') as src_f:
-                        target_f.write(src_f.read())
-            resp = File().get(path) 
-            return resp
+            return self._create_file_by_text_concat(path)
+        # elif request.args['action'] == 'youtube':
+        #     return self._create_file_by_youtube_download(path)
         else:
             return None, 400
         
