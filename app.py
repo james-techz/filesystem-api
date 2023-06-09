@@ -355,9 +355,9 @@ class File(Resource):
         files = request.json['files']
         if not isinstance(files, list):
             return None, 400
-        with open(full_path, 'wb') as target_f:
+        with open(full_path, 'w') as target_f:
             for _file_path in files:
-                with open(os.path.sep.join([DATA_DIR, _file_path]), 'rb') as src_f:
+                with open(os.path.sep.join([DATA_DIR, _file_path]), 'r') as src_f:
                     target_f.write(src_f.read())
         return File().get(path) 
     
