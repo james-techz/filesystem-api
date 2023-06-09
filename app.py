@@ -13,7 +13,7 @@ import requests_cache
 from pywebcopy import save_webpage
 import requests
 import cv2
-import youtube_dl
+from pytube import YouTube
 
 app = Flask(__name__)
 api = Api(app)
@@ -361,15 +361,31 @@ class File(Resource):
                     target_f.write(src_f.read())
         return File().get(path) 
     
-    # def _create_file_by_youtube_download(self, path):
-    #     full_path = os.path.sep.join([DATA_DIR, path])
-    #     if 'url' not in request.json:
-    #         return None, 400
-    #     url = request.json['url']
-    #     ydl_opts = {'outtmpl': full_path}
-    #     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-    #         ydl.download([url])
-    #     return File().get(path)  
+    def _create_file_by_youtube_download(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        if 'url' not in request.json:
+            return None, 400
+        url = request.json['url']
+        min_res = int(request.json['min_res'])
+        # read available streams  for the video
+        streams = YouTube(url).streams \
+            .filter(progressive=True) \
+            .order_by('resolution')
+        # download the smallest stream which satisfy minimal resolution
+        available_res = []
+        for _stream in streams:
+            _stream_res = int(_stream.resolution[:-1])
+            available_res.append(_stream_res)
+            if _stream_res >= min_res:
+                _stream.download(
+                    output_path=os.path.dirname(full_path),
+                    filename=os.path.basename(full_path),
+                )
+                return File().get(path)
+        
+        # if there's no stream satisfing the filter condition
+        return {'error_message': f'Resolution resquested not found. Requested >= {min_res}. Available: {available_res}'} 
+
 
 
     @require_token
@@ -390,8 +406,8 @@ class File(Resource):
         # create new file by concat multiple files
         elif request.args['action'] == 'concat':
             return self._create_file_by_text_concat(path)
-        # elif request.args['action'] == 'youtube':
-        #     return self._create_file_by_youtube_download(path)
+        elif request.args['action'] == 'youtube':
+            return self._create_file_by_youtube_download(path)
         else:
             return None, 400
         

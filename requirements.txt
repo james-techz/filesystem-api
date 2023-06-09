@@ -26,6 +26,7 @@ opencv-python-headless==4.7.0.72
 packaging==23.1
 platformdirs==3.5.1
 PyJWT==2.7.0
+pytube==15.0.0
 pytz==2023.3
 pywebcopy==7.0.2
 requests==2.30.0
