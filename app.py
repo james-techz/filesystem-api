@@ -7,7 +7,7 @@ from urllib.request import urlopen
 from urllib.error import HTTPError
 import jwt
 from pathlib import Path
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, ResultSet, Tag
 import grequests
 import requests_cache
 from pywebcopy import save_webpage
@@ -92,38 +92,43 @@ class Directory(Resource):
         # read / parse the target website to get links
         html = response.read()
         soup = BeautifulSoup(html, 'html.parser')
-        links = soup.find_all('a')
+        tds: ResultSet = soup.find_all('td')
         SKIP_LINKS = ['/', '../', './', '..', '.', '?C=N;O=D', '']
-        ONLY_SUFFIX = '.html'
+        # ONLY_SUFFIX = '.html'
 
         # construct link lists
-        if ONLY_SUFFIX != '':
-            filtered_links = [link['href'] for link in links if str(link['href']).endswith(ONLY_SUFFIX) ]
-        else:
-            filtered_links = [link['href'] for link in links if link['href'] not in SKIP_LINKS ]
+        # filtered_links = [link['href'] for td in tds if link['href'] not in SKIP_LINKS ]
+        filtered_links = []
+        for td in tds:
+            for child in td.contents:
+                if child.name == 'a' and child['href'] not in SKIP_LINKS:
+                    filtered_links.append(child['href'])
 
         filtered_full_links = [f"{url}/{link}" for link in filtered_links]
 
         def exception_request(request, exception):
             print(f"{request.url}: {exception}")
 
+        def response_callback(response: Response, *args, **kwargs):
+            splits = [part for part in response.url.split('/') if part != '']
+            if len(splits) < 2:
+                print(f'Cannot determine filename from he URL: {response.url}')
+                return response
+            filename = splits[-1]
+            if response.status_code == 200:
+                full_name = os.path.sep.join([full_path, filename])
+                with open(full_name, 'wb') as f:
+                    f.write(response.content)
+            return response
+
         # smultaneously get the links to speed up
         session = requests_cache.CachedSession(cache_name='my_cache')
         results = grequests.map(
-            (grequests.get(u, session=session, timeout=10) for u in filtered_full_links),
+            (grequests.get(u, session=session, callback=response_callback) for u in filtered_full_links),
             exception_handler=exception_request,
             size=10,
         )
 
-        # construct file content lists
-        file_contents = [r.text if r is not None else '' for r in results]
-        
-        # write the file content to the directory
-        for (name, content) in zip(filtered_links, file_contents):
-            full_name = os.path.sep.join([full_path, name])
-            with open(full_name, 'w') as f:
-                f.write(content)
-                
         return {
             'path': path,
             'type': ITEMTYPE.DIRECTORY,
