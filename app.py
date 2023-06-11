@@ -28,7 +28,7 @@ ADMIN_PASSWD = os.environ.get('ADMIN_PASSWD', None)
 JWT_ALGO = 'HS256'
 
 
-FORBIDDEN_DIR = os.path.sep.join([DATA_DIR, PUBLIC_SUBDIR]),
+FORBIDDEN_DIR = os.path.sep.join([DATA_DIR, PUBLIC_SUBDIR])
 
 class ITEMTYPE:
     DIRECTORY = 'directory'
@@ -434,5 +434,5 @@ api.add_resource(File, '/file/<path:path>')
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=DEBUG)
+    app.run(host='0.0.0.0', port=8000, debug=DEBUG)
 
