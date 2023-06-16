@@ -12,7 +12,7 @@ RUN apt update -y
 RUN apt install nginx net-tools procps vim -y
 # Install pip requirements
 COPY requirements.txt .
-RUN python -m pip install -r requirements.txt
+RUN pip install -U pip && python -m pip install -r requirements.txt
 
 COPY ./nginx_default.conf /etc/nginx/conf.d/default.conf
 COPY . /app
