@@ -1,12 +1,10 @@
 from flask_restful import Resource
 from fsapi_utils import *
-from fsapi_utils import _create_file_by_youtube_download
+from fsapi_utils import _create_file_by_youtube_download, _create_file_by_mp3_concat
 from flask import request, Response
 from urllib.request import urlopen
 from zipfile import ZipFile
-from pydub import AudioSegment
 import os 
-
 
 
 class File(Resource):
@@ -108,27 +106,6 @@ class File(Resource):
                     target_f.write(src_f.read())
         return File().get(path) 
     
-
-    def _create_file_by_mp3_concat(self, path):
-        full_path = os.path.sep.join([DATA_DIR, path])
-        if 'files' not in request.json:
-            return None, 400
-        files = request.json['files']
-        if not isinstance(files, list) or len(files) == 0:
-            return None, 400
-        
-        files = [os.path.sep.join([DATA_DIR, _file]) for _file in files]
-
-        _result_file = None
-        for _file in files:
-            if _result_file == None:
-                _result_file = AudioSegment.from_mp3(_file)
-            else:
-                _result_file = _result_file.append(AudioSegment.from_mp3(_file))
-        
-        _result_file.export(full_path, format="mp3")
-
-        return File().get(path) 
     
 
     @require_token
@@ -151,10 +128,10 @@ class File(Resource):
             return self._create_file_by_text_concat(path)
         elif request.args['action'] == 'youtube':
             async_result = _create_file_by_youtube_download.delay(path=path, request_json=request.json)
-            print(async_result)
             return {"task_id": async_result.id}
         elif request.args['action'] == 'concat_mp3':
-            return self._create_file_by_mp3_concat(path)
+            async_result = _create_file_by_mp3_concat.delay(path=path, request_json=request.json)
+            return {"task_id": async_result.id}
         else:
             return None, 400
         

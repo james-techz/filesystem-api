@@ -11,7 +11,7 @@ class BackgroundTask(Resource):
         print(result)
         return {
             "status": result.status,
-            "info": result.result,
+            "info": result.info,
         }
     
         

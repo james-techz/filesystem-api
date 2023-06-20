@@ -1,12 +1,12 @@
 # Shamelessly copied from http://flask.pocoo.org/docs/quickstart/
-from flask import Flask, request
+from flask import Flask
 from flask_restful import Api
 import os 
 from fsapi_utils import *
 from fsapi_dir import Directory
 from fsapi_file import File
+from fsapi_video import VideoList, VideoOperation
 from fsapi_bgtask import BackgroundTask
-
 
 app = Flask(__name__)
 app.config['CELERY'] = {
@@ -32,6 +32,8 @@ initialize()
 api.add_resource(Directory, '/dir/', '/dir/<path:path>')
 api.add_resource(File, '/file/<path:path>')
 api.add_resource(BackgroundTask, '/bgtask/<string:id>')
+api.add_resource(VideoList, '/videolist', '/videolist/')
+api.add_resource(VideoOperation, '/videooperation', '/videooperation/')
 
 from celery import Celery, Task
 
