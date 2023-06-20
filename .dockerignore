@@ -1,4 +1,5 @@
 .devcontainer
 .vscode
-_files/*.zip
+.git
+_files
 *.sqlite
