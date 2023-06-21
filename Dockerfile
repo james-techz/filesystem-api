@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED=1
 
 # Install nginx to serve public static files
 RUN apt update -y
-RUN apt install nginx net-tools procps vim ffmpeg -y
+RUN apt install nginx net-tools procps ffmpeg -y
 # Install pip requirements
 COPY requirements.txt .
 RUN pip install -U pip && python -m pip install -r requirements.txt
