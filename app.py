@@ -5,7 +5,7 @@ import os
 from fsapi_utils import *
 from fsapi_dir import Directory
 from fsapi_file import File
-from fsapi_video import VideoList, VideoOperation
+from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_bgtask import BackgroundTask
 
 app = Flask(__name__)
@@ -32,7 +32,7 @@ initialize()
 api.add_resource(Directory, '/dir/', '/dir/<path:path>')
 api.add_resource(File, '/file/<path:path>')
 api.add_resource(BackgroundTask, '/bgtask/<string:id>')
-api.add_resource(VideoList, '/videolist', '/videolist/')
+api.add_resource(VideoListRequest, '/videolist', '/videolist/')
 api.add_resource(VideoOperation, '/videooperation', '/videooperation/')
 
 from celery import Celery, Task

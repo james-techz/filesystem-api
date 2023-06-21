@@ -31,10 +31,10 @@ def _read_video_metadata(full_path: str):
     return _metadata
 
 
-class VideoList(Resource):
+class VideoListRequest(Resource):
     @require_token
     @os_exception_handle
-    def get(self):
+    def post(self):
         if 'files' not in request.json:
             return 'Missing key in request body: "files"', 400
         files = request.json['files']
