@@ -135,3 +135,35 @@ class File(Resource):
         else:
             return None, 400
         
+
+class TextSearchRequest (Resource):
+    @require_token
+    @os_exception_handle
+    def post(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+
+        if 'keyword' not in request.json:
+            return None, 400
+        keyword = request.json['keyword']
+
+        contain_title = True if str.lower(request.json.get('contain_title', '')) == 'true' else False
+        case_sensitive = True if str.lower(request.json.get('case_sensitive', '')) == 'true' else False
+
+        lines = []
+        with open(full_path, 'r') as f:
+            for index, line in enumerate(f):
+                # include first line if contain_title == True
+                if index == 0:
+                    if contain_title:
+                        lines.append(line)
+                else:
+                    if not case_sensitive:
+                        line = str.lower(line)
+                        keyword = str.lower(keyword)
+                    if keyword in line:
+                        lines.append(line) 
+                    
+        response = {
+            'result': ''.join(lines)
+        }
+        return response
