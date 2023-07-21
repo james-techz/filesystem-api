@@ -5,6 +5,8 @@ from flask import request, Response
 from urllib.request import urlopen
 from zipfile import ZipFile
 import os 
+import pathlib
+import shutil
 
 
 class File(Resource):
@@ -90,7 +92,13 @@ class File(Resource):
             return None, 400
         with ZipFile(full_path, 'x') as zipObj:
             for _file_path in files:
-                zipObj.write(os.path.sep.join([DATA_DIR, _file_path]))
+                target_full_path = pathlib.Path(os.path.sep.join([DATA_DIR, _file_path]))
+                if target_full_path.is_dir():
+                    for entry in target_full_path.rglob('*'):
+                        zipObj.write(entry)
+                else:
+                    zipObj.write(target_full_path)
+
         return File().get(path) 
     
     def _create_file_by_text_concat(self, path):
@@ -167,3 +175,99 @@ class TextSearchRequest (Resource):
             'result': ''.join(lines)
         }
         return response
+
+
+class TextReplaceRequest (Resource):
+    @require_token
+    @os_exception_handle
+    def post(self):
+        if 'file' not in request.json \
+            or 'search_term' not in request.json \
+            or 'replace_term' not in request.json:
+            return None, 400
+        
+        search_term = request.json['search_term']
+        replace_term = request.json['replace_term']
+
+        if search_term == '':
+            return None, 400
+
+        file_path = request.json['file']
+        full_path = os.path.sep.join([DATA_DIR, file_path])
+
+        # read at most 50MB per chunk
+        MAX_READ_SIZE_BYTES = 1024 * 1024 * 50  
+        result = ''
+        occurs = 0
+        with open(full_path, 'r') as f:
+            content = f.read(MAX_READ_SIZE_BYTES)
+            occurs = content.count(search_term)
+            if occurs > 0:
+                result = content.replace(search_term, replace_term)
+
+        if occurs > 0:
+            with open(full_path, 'w') as f:
+                f.write(result)
+
+        response = {
+            'replaced': occurs
+        }
+        
+        return response, 200
+
+
+class BatchFileCopyRequest (Resource):
+    @require_token
+    @os_exception_handle
+    def post(self):
+        if 'files' not in request.json:
+            return {"error_message": "'files' not found"}, 400
+        
+        files = request.json['files']
+        if not isinstance(files, list):
+            return {"error_message": "'files' must be a list"}, 400
+
+
+        # read at most 50MB per chunk
+        MAX_READ_SIZE_BYTES = 1024 * 1024 * 50  
+        results = []
+        for item in files:
+            full_src_path = os.path.sep.join([DATA_DIR, item['src']])
+            full_dest_path = os.path.sep.join([DATA_DIR, item['dest']])
+            
+            try:
+                full_src_path_obj = pathlib.Path(full_src_path)
+                full_dest_path_obj = pathlib.Path(full_dest_path)
+
+                if full_src_path_obj.is_dir():
+                    try:
+                        shutil.copytree(full_src_path, full_dest_path, dirs_exist_ok=True)
+                        msg = 'OK' 
+                    except OSError as e:
+                        msg = e.strerror
+                else:
+                    with open(full_src_path, 'rb') as f:
+                        content = f.read(MAX_READ_SIZE_BYTES)
+                        
+                        # make sure destination directory path exist
+                        full_dest_path_obj.parent.mkdir(parents=True, exist_ok=True)
+                        with open(full_dest_path, 'wb') as out:
+                            out.write(content)
+
+                    msg = 'OK' 
+
+            except OSError as e:
+                msg = e.strerror
+
+            results.append({
+                'src': item['src'],
+                'dest': item['dest'],
+                'result': msg
+            })
+
+
+        response = {
+            'results': results
+        }
+        
+        return response, 200

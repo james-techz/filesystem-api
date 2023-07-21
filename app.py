@@ -4,7 +4,7 @@ from flask_restful import Api
 import os 
 from fsapi_utils import *
 from fsapi_dir import Directory
-from fsapi_file import File, TextSearchRequest
+from fsapi_file import File, TextSearchRequest, TextReplaceRequest, BatchFileCopyRequest
 from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_bgtask import BackgroundTask
 
@@ -35,6 +35,8 @@ api.add_resource(BackgroundTask, '/bgtask/<string:id>')
 api.add_resource(VideoListRequest, '/videolist', '/videolist/')
 api.add_resource(VideoOperation, '/videooperation', '/videooperation/')
 api.add_resource(TextSearchRequest, '/textsearch/<path:path>')
+api.add_resource(TextReplaceRequest, '/textreplace', '/textreplace/')
+api.add_resource(BatchFileCopyRequest, '/batchcopy', '/batchcopy/')
 
 from celery import Celery, Task
 
