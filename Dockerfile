@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Install nginx to serve public static files
-RUN apt update -y && apt install net-tools procps ffmpeg -y 
+RUN apt update -y && apt install net-tools procps ffmpeg fluidsynth -y 
 RUN pip install -U pip
 
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder

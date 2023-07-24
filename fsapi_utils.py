@@ -55,7 +55,6 @@ def require_token(f):
 
 
 @shared_task(bind=True)
-@os_exception_handle
 def _create_file_by_youtube_download(self, path, request_json):
     full_path = os.path.sep.join([DATA_DIR, path])
 
@@ -190,3 +189,49 @@ def _concat_video_files(self, request_json):
         'status': 'SUCCEEDED',
         'info': request_json['target_file']
     }, 200
+
+
+
+@shared_task(bind=True)
+def _create_wave_from_midi_sf(self, path, midi_file, sf_file):
+    # fix the problem of grequests patching subprocess module
+    # by reloading the original subprocess module
+    import subprocess
+    import importlib
+    importlib.reload(subprocess)
+
+    full_path = os.path.sep.join([DATA_DIR, path])
+    full_midi_path = os.path.sep.join([DATA_DIR, midi_file])
+    full_sf_path = os.path.sep.join([DATA_DIR, sf_file])
+    completed_process = subprocess.run(["fluidsynth", "-Twav", f"-F{full_path}", full_sf_path, full_midi_path], capture_output=True)
+
+    return {
+        'path': path,
+        'type': ITEMTYPE.FILE,
+        'process_return_code':  completed_process.returncode,
+        'process_stdout': completed_process.stdout.decode('utf-8'),
+        'process_stderr': completed_process.stderr.decode('utf-8')
+    }
+
+
+@shared_task(bind=True)
+@os_exception_handle
+def _create_wave_from_cut(self, path, wav_file, from_time, to_time):
+    
+    full_path = os.path.sep.join([DATA_DIR, path])
+    full_wav_file = os.path.sep.join([DATA_DIR, wav_file])
+    t1 = from_time * 1000 #Works in milliseconds
+    t2 = to_time * 1000
+    newAudio = AudioSegment.from_wav(full_wav_file)
+    newAudio = newAudio[t1:t2]
+    if t1 < 0:
+        return {
+            'error_message': 'from_time is negative of wav file range'
+        }
+    else:
+        newAudio.export(full_path, format="wav") #Exports to a wav file in the current path.
+
+        return {
+            'path': path,
+            'type': ITEMTYPE.FILE
+        }

@@ -1,12 +1,14 @@
 from flask_restful import Resource
 from fsapi_utils import *
-from fsapi_utils import _create_file_by_youtube_download, _create_file_by_mp3_concat
+from fsapi_utils import _create_file_by_youtube_download, _create_file_by_mp3_concat, \
+    _create_wave_from_midi_sf, _create_wave_from_cut
 from flask import request, Response
 from urllib.request import urlopen
 from zipfile import ZipFile
 import os 
 import pathlib
 import shutil
+import pretty_midi
 
 
 class File(Resource):
@@ -276,3 +278,79 @@ class BatchFileCopyRequest (Resource):
         }
         
         return response, 200
+
+
+
+class MIDIRequest(Resource):
+    @require_token
+    @os_exception_handle
+    def post(self, path):
+
+        full_path = os.path.sep.join([DATA_DIR, path])
+
+        if 'notes' not in request.json:
+            return {"error_message": "'notes' not found"}, 400
+        
+        notes = request.json['notes']
+        if not isinstance(notes, list):
+            return {"error_message": "'notes' must be a list"}, 400
+        
+        instrument_name = request.json.get('instrument_name', 'cello')
+
+        midi_obj = pretty_midi.PrettyMIDI()
+        instrument = pretty_midi.Instrument(program=pretty_midi.instrument_name_to_program(instrument_name))
+        for note in notes:
+            n_name = note['name']
+            n_velocity = note['velocity']
+            n_start = note['start']
+            n_end = note['end']
+
+            note_number = pretty_midi.note_name_to_number(n_name)
+            note = pretty_midi.Note(velocity=n_velocity, pitch=note_number, start=n_start, end=n_end)
+            # Add it to our cello instrument
+            instrument.notes.append(note)
+        # Add the cello instrument to the PrettyMIDI object
+        midi_obj.instruments.append(instrument)
+        # Write out the MIDI data
+        pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+        midi_obj.write(full_path)
+
+        return File().get(path) 
+
+
+class WAVRequest(Resource):
+    @require_token
+    @os_exception_handle
+    def post(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        action = request.json.get('action', '')
+
+        if action == 'from_midi':
+            if 'midi_file' not in request.json or 'sf_file' not in request.json:
+                return {"error_message": "'midi_file' or 'sf_file' not found"}, 400
+            
+            pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+            midi_file  = request.json['midi_file']
+            sf_file  = request.json['sf_file']
+
+            async_result = _create_wave_from_midi_sf.delay(path, midi_file, sf_file)
+            return {"task_id": async_result.id}
+        elif action == 'from_wav_cut':
+            if 'wav_file' not in request.json \
+                or 'from_time' not in request.json \
+                or 'to_time' not in request.json:
+                    return {"error_message": "'wav_file' or 'from_time' or 'to_time' not found"}, 400
+            
+            pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+            wav_file  = request.json['wav_file']
+            from_time  = request.json['from_time']
+            to_time  = request.json['to_time']
+
+            async_result = _create_wave_from_cut.delay(path, wav_file, from_time, to_time)
+            return {"task_id": async_result.id}
+
+        else:
+            return {"error_message": "'action' is not defined"}
+        
+        
+        
