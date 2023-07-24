@@ -25,7 +25,12 @@ class File(Resource):
         full_path = os.path.sep.join([DATA_DIR, path])
         req_type = request.args['type'] if 'type' in request.args else None
         if req_type == 'content':
-            return Response(self.stream_file_content(full_path), mimetype='application/octet-stream')
+            try:
+                with open(full_path, 'rb') as f:
+                    pass
+                return Response(self.stream_file_content(full_path), mimetype='application/octet-stream')
+            except OSError as e:
+                return {'error_message': f'{path}: {e.strerror}', }, 400
         else:
             response = {
                 'path': path,
