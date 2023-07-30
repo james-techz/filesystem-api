@@ -189,35 +189,39 @@ class TextReplaceRequest (Resource):
     @os_exception_handle
     def post(self):
         if 'file' not in request.json \
-            or 'search_term' not in request.json \
-            or 'replace_term' not in request.json:
+            or 'phrases' not in request.json:
             return None, 400
         
-        search_term = request.json['search_term']
-        replace_term = request.json['replace_term']
-
-        if search_term == '':
-            return None, 400
+        if not isinstance(request.json['phrases'], list):
+            return '{"error_message": "\'phrases\' must be a list"}', 400
 
         file_path = request.json['file']
         full_path = os.path.sep.join([DATA_DIR, file_path])
-
-        # read at most 50MB per chunk
         MAX_READ_SIZE_BYTES = 1024 * 1024 * 50  
-        result = ''
-        occurs = 0
-        with open(full_path, 'r') as f:
-            content = f.read(MAX_READ_SIZE_BYTES)
-            occurs = content.count(search_term)
-            if occurs > 0:
-                result = content.replace(search_term, replace_term)
+            
+        phrases = request.json['phrases']
 
-        if occurs > 0:
-            with open(full_path, 'w') as f:
-                f.write(result)
+        with open(full_path, 'r') as f:
+            # read at most 50MB per chunk
+            content = f.read(MAX_READ_SIZE_BYTES)
+
+            for phrase in phrases:
+                search_term = phrase['search_term']
+                replace_term = phrase['replace_term']
+
+                if search_term == '':
+                    return {"error_message": "search_term must be defined"}, 400
+
+                occurs = content.count(search_term)
+                if occurs > 0:
+                    content = content.replace(search_term, replace_term)
+                phrase['replaced_count'] = occurs
+
+        with open(full_path, 'w') as f:
+            f.write(content)
 
         response = {
-            'replaced': occurs
+            'phrases': phrases
         }
         
         return response, 200
