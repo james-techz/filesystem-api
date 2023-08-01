@@ -1,9 +1,9 @@
 # Shamelessly copied from http://flask.pocoo.org/docs/quickstart/
+from fsapi_dir import Directory
 from flask import Flask
 from flask_restful import Api
 import os 
 from fsapi_utils import *
-from fsapi_dir import Directory
 from fsapi_file import File, \
     TextSearchRequest, TextReplaceRequest, \
     BatchFileCopyRequest, MIDIRequest, WAVRequest
