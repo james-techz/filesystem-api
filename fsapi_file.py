@@ -185,45 +185,49 @@ class TextSearchRequest (Resource):
 
 
 class TextReplaceRequest (Resource):
+
+    def _text_replace_file(self, file_obj):
+        file_path = file_obj['path']
+        full_path = os.path.sep.join([DATA_DIR, file_path])
+        phrases = file_obj['phrases']
+        MAX_READ_SIZE_BYTES = 1024 * 1024 * 50  
+        try:
+            with open(full_path, 'r') as f:
+                # read at most 50MB per chunk
+                content = f.read(MAX_READ_SIZE_BYTES)
+                for phrase in phrases:
+                    search_term = phrase['search_term']
+                    replace_term = phrase['replace_term']
+
+                    if search_term == '':
+                        phrase['error_message'] = "search_term must be defined"
+                    else:
+                        occurs = content.count(search_term)
+                        if occurs > 0:
+                            content = content.replace(search_term, replace_term)
+                        phrase['replaced_count'] = occurs
+
+            with open(full_path, 'w') as f:
+                f.write(content)
+        except OSError as e:
+            trimmed_filename = os.path.sep.join(e.filename.split(os.path.sep)[1:])
+            file_obj['error_message'] = f'{trimmed_filename}: {e.strerror}'
+
+
     @require_token
     @os_exception_handle
     def post(self):
-        if 'file' not in request.json \
-            or 'phrases' not in request.json:
+        if 'files' not in request.json:
             return None, 400
-        
-        if not isinstance(request.json['phrases'], list):
-            return '{"error_message": "\'phrases\' must be a list"}', 400
+        if not isinstance(request.json['files'], list):
+            return '{"error_message": "\'files\' must be a list"}', 400
 
-        file_path = request.json['file']
-        full_path = os.path.sep.join([DATA_DIR, file_path])
-        MAX_READ_SIZE_BYTES = 1024 * 1024 * 50  
-            
-        phrases = request.json['phrases']
-
-        with open(full_path, 'r') as f:
-            # read at most 50MB per chunk
-            content = f.read(MAX_READ_SIZE_BYTES)
-
-            for phrase in phrases:
-                search_term = phrase['search_term']
-                replace_term = phrase['replace_term']
-
-                if search_term == '':
-                    return {"error_message": "search_term must be defined"}, 400
-
-                occurs = content.count(search_term)
-                if occurs > 0:
-                    content = content.replace(search_term, replace_term)
-                phrase['replaced_count'] = occurs
-
-        with open(full_path, 'w') as f:
-            f.write(content)
-
+        files = request.json['files']
+        for file_obj in files:
+            self._text_replace_file(file_obj)
         response = {
-            'phrases': phrases
+            'files': files
         }
-        
         return response, 200
 
 
