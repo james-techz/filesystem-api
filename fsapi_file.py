@@ -186,47 +186,53 @@ class TextSearchRequest (Resource):
 
 class TextReplaceRequest (Resource):
 
-    def _text_replace_file(self, file_obj):
-        file_path = file_obj['path']
-        full_path = os.path.sep.join([DATA_DIR, file_path])
-        phrases = file_obj['phrases']
+    def _text_replace_file(self, job):
+        paths = job['paths']
+        full_paths = [os.path.sep.join([DATA_DIR, path]) for path in paths]
+        phrases = job['phrases']
+        for phrase in phrases:
+            phrase['replaced_count'] = 0
+
         MAX_READ_SIZE_BYTES = 1024 * 1024 * 50  
-        try:
-            with open(full_path, 'r') as f:
-                # read at most 50MB per chunk
-                content = f.read(MAX_READ_SIZE_BYTES)
-                for phrase in phrases:
-                    search_term = phrase['search_term']
-                    replace_term = phrase['replace_term']
+        for full_path in full_paths:
+            try:
+                with open(full_path, 'r') as f:
+                    # read at most 50MB per chunk
+                    content = f.read(MAX_READ_SIZE_BYTES)
+                    for phrase in phrases:
+                        search_term = phrase['search_term']
+                        replace_term = phrase['replace_term']
 
-                    if search_term == '':
-                        phrase['error_message'] = "search_term must be defined"
-                    else:
-                        occurs = content.count(search_term)
-                        if occurs > 0:
-                            content = content.replace(search_term, replace_term)
-                        phrase['replaced_count'] = occurs
+                        if search_term == '':
+                            phrase['error_message'] = "search_term must be defined"
+                        else:
+                            occurs = content.count(search_term)
+                            if occurs > 0:
+                                content = content.replace(search_term, replace_term)
+                            phrase['replaced_count'] += occurs
 
-            with open(full_path, 'w') as f:
-                f.write(content)
-        except OSError as e:
-            trimmed_filename = os.path.sep.join(e.filename.split(os.path.sep)[1:])
-            file_obj['error_message'] = f'{trimmed_filename}: {e.strerror}'
+                with open(full_path, 'w') as f:
+                    f.write(content)
+            except OSError as e:
+                trimmed_filename = os.path.sep.join(e.filename.split(os.path.sep)[1:])
+                if 'error_messages' not in job:
+                    job['error_messages'] = []
+                job['error_messages'].append(f'{trimmed_filename}: {e.strerror}')
 
 
     @require_token
     @os_exception_handle
     def post(self):
-        if 'files' not in request.json:
+        if 'jobs' not in request.json:
             return None, 400
-        if not isinstance(request.json['files'], list):
-            return '{"error_message": "\'files\' must be a list"}', 400
+        if not isinstance(request.json['jobs'], list):
+            return '{"error_message": "\'jobs\' must be a list"}', 400
 
-        files = request.json['files']
-        for file_obj in files:
-            self._text_replace_file(file_obj)
+        jobs = request.json['jobs']
+        for job in jobs:
+            self._text_replace_file(job)
         response = {
-            'files': files
+            'jobs': jobs
         }
         return response, 200
 
