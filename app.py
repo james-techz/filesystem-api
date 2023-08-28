@@ -8,6 +8,7 @@ from fsapi_file import File, \
     TextSearchRequest, TextReplaceRequest, \
     BatchFileCopyRequest, MIDIRequest, WAVRequest
 from fsapi_video import VideoListRequest, VideoOperation
+from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
 
 app = Flask(__name__)
@@ -41,6 +42,7 @@ api.add_resource(TextReplaceRequest, '/textreplace', '/textreplace/')
 api.add_resource(BatchFileCopyRequest, '/batchcopy', '/batchcopy/')
 api.add_resource(MIDIRequest, '/midi/<path:path>')
 api.add_resource(WAVRequest, '/wav/<path:path>')
+api.add_resource(ImageOperation, '/image', '/image/')
 
 from celery import Celery, Task
 
