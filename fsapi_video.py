@@ -1,6 +1,7 @@
 from flask_restful import Resource
 from flask import request
-from fsapi_utils import os_exception_handle, require_token, DATA_DIR, _split_by_interval, _concat_video_files
+from fsapi_utils import os_exception_handle, require_token, DATA_DIR, \
+    _split_by_interval, _concat_video_files, _extract_mp3_from_video
 import os 
 import cv2
 
@@ -65,6 +66,9 @@ class VideoOperation(Resource):
             return {'task_id': async_result.id}
         if request.json['action'] == 'concat':
             async_result = _concat_video_files.delay(request.json)
+            return {'task_id': async_result.id}
+        if request.json['action'] == 'extract_audio':
+            async_result = _extract_mp3_from_video.delay(request.json)
             return {'task_id': async_result.id}
         else:
             return f'Invalid request. Invalid action: {request.json["action"]}', 400

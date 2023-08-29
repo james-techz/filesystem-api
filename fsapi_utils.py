@@ -191,6 +191,34 @@ def _concat_video_files(self, request_json):
     }, 200
 
 
+@shared_task(bind=True)
+def _extract_mp3_from_video(self, request_json):
+    if request_json['source_file'] == None or request_json['target_file'] == None:
+        return 'Invalid request. Request body must contain: source_file, target_file', 400
+    
+    source_file_path = os.path.sep.join([DATA_DIR, request_json['source_file']])
+    target_file = os.path.sep.join([DATA_DIR, request_json['target_file']])
+    if 'bitrate' in request_json:
+        bitrate = request_json['bitrate']
+    else:
+        bitrate = None
+
+    try:
+        video = VideoFileClip(source_file_path)
+        video.audio.write_audiofile(filename=target_file, bitrate=bitrate, write_logfile=True)
+
+        return {
+            'status': 'SUCCEEDED',
+            'info': target_file
+        }, 200
+    except Exception as e:
+        return {
+            'status': 'FAILED',
+            'info': str(e)
+        }, 500
+
+    
+
 
 @shared_task(bind=True)
 def _create_wave_from_midi_sf(self, path, midi_file, sf_file):
