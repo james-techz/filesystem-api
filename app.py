@@ -10,6 +10,7 @@ from fsapi_file import File, \
 from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
+from fsapi_midi import MIDIGenerator
 
 app = Flask(__name__)
 app.config['CELERY'] = {
@@ -43,6 +44,7 @@ api.add_resource(BatchFileCopyRequest, '/batchcopy', '/batchcopy/')
 api.add_resource(MIDIRequest, '/midi/<path:path>')
 api.add_resource(WAVRequest, '/wav/<path:path>')
 api.add_resource(ImageOperation, '/image', '/image/')
+api.add_resource(MIDIGenerator, '/midigenerate', '/midigenerate/')
 
 from celery import Celery, Task
 
