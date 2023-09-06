@@ -6,7 +6,8 @@ import os
 from fsapi_utils import *
 from fsapi_file import File, \
     TextSearchRequest, TextReplaceRequest, \
-    BatchFileCopyRequest, MIDIRequest, WAVRequest
+    BatchFileCopyRequest, MIDIRequest, WAVRequest, \
+    BatchThumbnailRequest
 from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
@@ -45,6 +46,7 @@ api.add_resource(MIDIRequest, '/midi/<path:path>')
 api.add_resource(WAVRequest, '/wav/<path:path>')
 api.add_resource(ImageOperation, '/image', '/image/')
 api.add_resource(MIDIGenerator, '/midigenerate', '/midigenerate/')
+api.add_resource(BatchThumbnailRequest, '/batchthumbnail', '/batchthumbnail/')
 
 from celery import Celery, Task
 

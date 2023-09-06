@@ -1,7 +1,7 @@
 from flask_restful import Resource
 from fsapi_utils import *
 from fsapi_utils import _create_file_by_youtube_download, _create_file_by_mp3_concat, \
-    _create_wave_from_midi_sf, _create_wave_from_cut
+    _create_wave_from_midi_sf, _create_wave_from_cut, _batch_thumbnail
 from flask import request, Response
 from urllib.request import urlopen
 from zipfile import ZipFile
@@ -367,4 +367,22 @@ class WAVRequest(Resource):
             return {"error_message": "'action' is not defined"}
         
         
+class BatchThumbnailRequest(Resource):
+    @require_token
+    @os_exception_handle
+    def post(self):
+        if 'thumbnail_dir' not in request.json:
+            return {'error_message': '"thumbnail_dir" parameter is missing'}, 400
+        if 'videos' not in request.json and 'images' not in request.json:
+            return {'error_message': '"videos" and "images" parameters are missing'}, 400
         
+        videos = request.json.get('videos', [])
+        images = request.json.get('images', [])
+
+        if not isinstance(videos, list) or not isinstance(images, list):
+            return {'error_message': '"videos" and "images" must be lists'}, 400
+
+        thumbnail_dir_fullpath = os.path.sep.join([DATA_DIR, request.json['thumbnail_dir']])
+        pathlib.Path(thumbnail_dir_fullpath).mkdir(parents=True, exist_ok=True)
+        async_result = _batch_thumbnail.delay(thumbnail_dir_fullpath, videos, images)
+        return {"task_id": async_result.id}

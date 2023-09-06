@@ -7,6 +7,11 @@ from celery import shared_task
 import json
 from pydub import AudioSegment
 from moviepy.editor import VideoFileClip, concatenate_videoclips
+from urllib.request import urlopen
+import cv2
+import errno
+import pathlib
+import shutil
 
 DATA_DIR = '_files'
 PUBLIC_SUBDIR = '_public'
@@ -263,3 +268,160 @@ def _create_wave_from_cut(self, path, wav_file, from_time, to_time):
             'path': path,
             'type': ITEMTYPE.FILE
         }
+    
+
+
+
+@shared_task(bind=True)
+def _batch_thumbnail(self, thumbnail_dir_fullpath, videos, images):
+
+    def _download_file(dir_full_path, url):
+        filename = url.split('/')[-1]
+        try:
+            response = urlopen(url)
+        except HTTPError as e:
+            return {'error_message': f'{url}: {e.code} - {e.reason}'}
+        if response.status not in [200]:
+            return {'error_message': f'{url}: {response.status} - {response.reason}'}
+        CHUNK = 16 * 1024
+        file_fp = os.path.sep.join([dir_full_path, filename])
+        with open(file_fp, 'wb') as f:
+            while True:
+                chunk = response.read(CHUNK)
+                if not chunk:
+                    break
+                f.write(chunk)
+        return {'path': file_fp}
+
+    tmp_dir_fullpath = thumbnail_dir_fullpath + "_tmp"
+    pathlib.Path(tmp_dir_fullpath).mkdir(parents=True, exist_ok=True)
+
+    images_total = len(images)
+    videos_total = len(videos)
+    images_processed = 0
+    videos_processed = 0
+
+    def _check_state():
+        image_ratio = 0 if images_total == 0 else int((images_processed / images_total) * 100)
+        video_ratio = 0 if videos_total == 0 else int((videos_processed / videos_total) * 100)
+
+        return {
+            'images_total': images_total,
+            'images_processed': images_processed,
+            'images_processed_ratio': image_ratio,
+            'videos_total': videos_total,
+            'videos_processed': videos_processed,
+            'videos_processed_ratio': video_ratio
+        }
+
+    self.update_state(state='PROGRESS', meta=_check_state())
+
+    for image_json in images:
+        if 'url' not in image_json or 'width' not in image_json:
+            image_json.update({'error_message': '"url" and "width" are both required'})
+            images_processed += 1
+            self.update_state(state='PROGRESS', meta=_check_state())
+            continue
+
+        download_result = _download_file(tmp_dir_fullpath, image_json['url'])
+        if 'error_message' in download_result:
+            image_json.update({'error_message': download_result['error_message']})
+            images_processed += 1
+            self.update_state(state='PROGRESS', meta=_check_state())
+            continue
+
+        image = cv2.imread(download_result['path'], cv2.IMREAD_UNCHANGED)
+        if image is None:
+            image_json.update({'error_message': f'Read failed: {download_result["path"]}'})
+            images_processed += 1
+            self.update_state(state='PROGRESS', meta=_check_state())
+            continue 
+
+        request_w = image_json['width']
+        if len(image.shape) == 2:
+            actual_h, actual_w = image.shape
+        else:
+            actual_h, actual_w, _ = image.shape
+
+        request_h = int((request_w / actual_w) * actual_h)
+
+        resized_image = cv2.resize(image, (request_w, request_h), 0, 0, cv2.INTER_CUBIC)
+        resized_image_fp = os.path.sep.join([
+            thumbnail_dir_fullpath,
+            image_json['url'].split('/')[-1] + '.thumb.jpeg'
+        ])
+        if cv2.imwrite(resized_image_fp, resized_image):
+            image_json.update({'thumb_file': resized_image_fp})
+        else:
+            image_json.update({'error_message': 'Operation failed. Please check the server log for more info'})
+
+        images_processed += 1
+        self.update_state(state='PROGRESS', meta=_check_state())
+        pathlib.Path(download_result['path']).unlink(missing_ok=True)
+    
+    for video_json in videos:
+        if 'url' not in video_json or 'width' not in video_json:
+            video_json.update({'error_message': '"url" and "width" are both required'})
+            videos_processed += 1
+            self.update_state(state='PROGRESS', meta=_check_state())
+            continue
+        ss_mark = video_json.get('ss_mark', 5.0)
+        download_result = _download_file(tmp_dir_fullpath, video_json['url'])
+        if 'error_message' in download_result:
+            video_json.update({'error_message': download_result['error_message']})
+            videos_processed += 1
+            self.update_state(state='PROGRESS', meta=_check_state())
+            continue
+
+        video = cv2.VideoCapture(download_result['path'])
+        if not video.isOpened():
+            video_json.update({'error_message': f'Read failed, path: {download_result["path"]}'})
+            videos_processed += 1
+            self.update_state(state='PROGRESS', meta=_check_state())
+            continue
+        else:
+            # get video info
+            fps = video.get(cv2.CAP_PROP_FPS)
+            frames = video.get(cv2.CAP_PROP_FRAME_COUNT)
+            target_frame = ss_mark * fps
+            if target_frame > frames:
+                target_frame = frames
+            video.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+            ret, frame = video.read()
+            if not ret:
+                video_json.update({'error_message': f'Read frame failed, path: {download_result["path"]}, frame: {target_frame}'})
+                videos_processed += 1
+                self.update_state(state='PROGRESS', meta=_check_state())
+                continue
+
+        request_w = video_json['width']
+        if len(frame.shape) == 2:
+            actual_h, actual_w = frame.shape
+        else:
+            actual_h, actual_w, _ = frame.shape
+
+        request_h = int((request_w / actual_w) * actual_h)
+
+        resized_image = cv2.resize(frame, (request_w, request_h), 0, 0, cv2.INTER_CUBIC)
+        resized_image_fp = os.path.sep.join([
+            thumbnail_dir_fullpath,
+            video_json['url'].split('/')[-1] + '.thumb.jpeg'
+        ])
+        if cv2.imwrite(resized_image_fp, resized_image):
+            video_json.update({'thumb_file': resized_image_fp})
+        else:
+            video_json.update({'error_message': 'Operation failed. Please check the server log for more info'})
+
+        videos_processed += 1
+        self.update_state(state='PROGRESS', meta=_check_state())
+        pathlib.Path(download_result['path']).unlink(missing_ok=True)
+
+
+
+    self.update_state(state='SUCCESS', meta={
+        'thumbnail_dir': thumbnail_dir_fullpath,
+        'videos': videos,
+        'images': images
+    })
+    
+    shutil.rmtree(tmp_dir_fullpath)
