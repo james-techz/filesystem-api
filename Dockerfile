@@ -38,7 +38,7 @@ USER appuser
 # Copy pre-built python environment
 COPY --from=build-stage /home/appuser/.local /home/appuser/.local
 # Copy code
-COPY . /app
+COPY *.py *.conf *.txt *.sh *.mag Dockerfile /app
 WORKDIR /app
 EXPOSE 5000
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug

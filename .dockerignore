@@ -3,3 +3,4 @@
 .git
 _files
 *.sqlite
+docker-compose.yaml
