@@ -13,6 +13,7 @@ from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
 from fsapi_midi import MIDIGenerator
 from fsapi_html import SVGRequest
+from fsapi_srt import SRTRequest
 
 app = Flask(__name__)
 app.config['CELERY'] = {
@@ -49,6 +50,7 @@ api.add_resource(ImageOperation, '/image', '/image/')
 api.add_resource(MIDIGenerator, '/midigenerate', '/midigenerate/')
 api.add_resource(BatchThumbnailRequest, '/batchthumbnail', '/batchthumbnail/')
 api.add_resource(SVGRequest, '/svgrequest', '/svgrequest/')
+api.add_resource(SRTRequest, '/srtrequest', '/srtrequest/')
 
 from celery import Celery, Task
 
