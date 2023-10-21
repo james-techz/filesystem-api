@@ -1,3 +1,4 @@
+import grequests
 import os
 from urllib.error import HTTPError
 from flask import request
@@ -9,9 +10,11 @@ from pydub import AudioSegment
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 from urllib.request import urlopen
 import cv2
-import errno
 import pathlib
 import shutil
+import requests
+import numpy as np
+import scipy
 
 DATA_DIR = '_files'
 PUBLIC_SUBDIR = '_public'
@@ -21,6 +24,7 @@ ADMIN_USER = os.environ.get('ADMIN_USER', None)
 ADMIN_PASSWD = os.environ.get('ADMIN_PASSWD', None)
 JWT_ALGO = 'HS256'
 READ_CHUNK_BYTE = 4096
+HF_API_TOKEN = os.environ.get('HF_API_TOKEN', None)
 
 FORBIDDEN_DIR = os.path.sep.join([DATA_DIR, PUBLIC_SUBDIR])
 
@@ -425,3 +429,46 @@ def _batch_thumbnail(self, thumbnail_dir_fullpath, videos, images):
     })
     
     shutil.rmtree(tmp_dir_fullpath)
+
+
+@shared_task(bind=True)
+def _musicgen(self, output_file, input_text, duration):
+    try:
+        # API_TOKEN = "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"
+        API_URL = "https://u2i0qhej2tuzfzbq.eu-west-1.aws.endpoints.huggingface.cloud"
+        headers = {
+            "Authorization": f"Bearer {HF_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
+
+        TOKEN_PER_SECOND = 50 # 1500 token = 30s -> 50 token per second
+        # This model supports maximum 1500 new token generation
+        max_new_tokens = (30 if duration >= 30 else duration) * TOKEN_PER_SECOND
+        payload = {
+            'inputs': input_text,
+            'parameters': {
+                'max_new_tokens': max_new_tokens
+            }
+        }
+
+        response = requests.request("POST", API_URL, headers=headers, json=payload)
+        if response.status_code == 200:
+            res_json = response.json()
+            npy = np.array(res_json[0]["generated_audio"]).astype(np.float32)
+            sampling_rate = 32000
+            scipy.io.wavfile.write(output_file, rate=sampling_rate, data=npy)
+            return {
+                'status': 'SUCCEEDED',
+                'info': output_file
+            }, 200
+        else:
+            return {
+                'status': 'FAILED',
+                'info': f'HF query error code: {response.status_code}',
+                'message': response.text
+            }, 500
+    except Exception as e:
+        return {
+            'status': 'FAILED',
+            'info': str(e)
+        }, 500
