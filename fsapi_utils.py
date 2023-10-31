@@ -15,6 +15,8 @@ import shutil
 import requests
 import numpy as np
 import scipy
+from scipy.io import wavfile
+from scipy import interpolate
 
 DATA_DIR = '_files'
 PUBLIC_SUBDIR = '_public'
@@ -31,6 +33,9 @@ HF_MUSIC_API_TOKEN = os.environ.get('HF_MUSIC_API_TOKEN', None)
 # https://y7gd5iij1ni4qbj0.eu-west-1.aws.endpoints.huggingface.cloud
 HF_AUDIO_API_URL = os.environ.get('HF_AUDIO_API_URL', None)
 HF_AUDIO_API_TOKEN = os.environ.get('HF_AUDIO_API_TOKEN', None)
+
+HF_MUSIC_MELODY_API_URL = os.environ.get('HF_MUSIC_MELODY_API_URL', None)
+HF_MUSIC_MELODY_API_TOKEN = os.environ.get('HF_MUSIC_MELODY_API_TOKEN', None)
 
 
 FORBIDDEN_DIR = os.path.sep.join([DATA_DIR, PUBLIC_SUBDIR])
@@ -500,6 +505,58 @@ def _audiogen(self, output_file, input_text, duration):
             res_json = response.json()
             npy = np.array(res_json[0]["generated_audio"][0]).astype(np.float32)
             sampling_rate = 16000
+            scipy.io.wavfile.write(output_file, rate=sampling_rate, data=npy)
+            return {
+                'status': 'SUCCEEDED',
+                'info': output_file
+            }, 200
+        else:
+            return {
+                'status': 'FAILED',
+                'info': f'HF query error code: {response.status_code}',
+                'message': response.text
+            }, 500
+    except Exception as e:
+        return {
+            'status': 'FAILED',
+            'info': str(e)
+        }, 500
+    
+
+
+@shared_task(bind=True)
+def _musicgen_melody(self, output_file, payload):
+    try:
+        API_URL = HF_MUSIC_MELODY_API_URL
+        headers = {
+            "Authorization": f"Bearer {HF_MUSIC_MELODY_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
+
+        if 'input_audio_file' in payload["inputs"]:
+            AUDIO_FILE = os.path.sep.join([DATA_DIR, payload["inputs"].pop('input_audio_file')])
+            NEW_SAMPLERATE = 32000
+            old_samplerate, old_audio = wavfile.read(AUDIO_FILE)
+
+            if old_samplerate != NEW_SAMPLERATE:
+                duration = old_audio.shape[0] / old_samplerate
+
+                time_old  = np.linspace(0, duration, old_audio.shape[0])
+                time_new  = np.linspace(0, duration, int(old_audio.shape[0] * NEW_SAMPLERATE / old_samplerate))
+
+                interpolator = interpolate.interp1d(time_old, old_audio.T)
+                new_audio = interpolator(time_new).T
+
+                audio = new_audio.T[0,:].tolist()
+                payload["inputs"]["audio"] = {
+                    "data": audio
+                }
+
+        response = requests.request("POST", API_URL, headers=headers, json=payload)
+        if response.status_code == 200:
+            res_json = response.json()
+            npy = np.array(res_json[0]["generated_audio"]).astype(np.float32).T
+            sampling_rate = 32000
             scipy.io.wavfile.write(output_file, rate=sampling_rate, data=npy)
             return {
                 'status': 'SUCCEEDED',

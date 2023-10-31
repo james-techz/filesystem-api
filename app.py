@@ -14,7 +14,7 @@ from fsapi_bgtask import BackgroundTask
 from fsapi_midi import MIDIGenerator
 from fsapi_html import SVGRequest
 from fsapi_srt import SRTRequest
-from fsapi_musicgen import MusicGen, AudioGen
+from fsapi_musicgen import MusicGen, AudioGen, MusicGenMelody
 
 app = Flask(__name__)
 app.config['CELERY'] = {
@@ -54,6 +54,7 @@ api.add_resource(SVGRequest, '/svgrequest', '/svgrequest/')
 api.add_resource(SRTRequest, '/srtrequest', '/srtrequest/')
 api.add_resource(MusicGen, '/musicgen', '/musicgen/')
 api.add_resource(AudioGen, '/audiogen', '/audiogen/')
+api.add_resource(MusicGenMelody, '/musicgenmelody', '/musicgenmelody/')
 
 from celery import Celery, Task
 
