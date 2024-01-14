@@ -194,23 +194,46 @@ def _split_by_interval(self, request_json):
 
 @shared_task(bind=True)
 def _concat_video_files(self, request_json):
-    if request_json['source_files'] == None or request_json['target_file'] == None:
-        return 'Invalid request. Request body must contain: source_files, target_file', 400
-    if not isinstance(request_json['source_files'], list) or len(request_json['source_files']) == 0:
-        return 'Invalid request. "source_files" must be a non-empty list', 400
-    
-    source_file_paths = [os.path.sep.join([DATA_DIR, _file]) for _file in request_json['source_files']]
-    target_file_path = os.path.sep.join([DATA_DIR, request_json['target_file']])
 
-    video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
-    final_clip = concatenate_videoclips(video_clips)
-    final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
+    items = request_json['items']
+    if not isinstance(items, list):
+        return 'Invalid request. "items" must be a list', 400
+
+    # validate the items format
+    for item in items:
+        if item['source_files'] == None or item['target_file'] == None:
+            return 'Invalid request. Each item must contain: source_files, target_file', 400
+        if not isinstance(item['source_files'], list) or len(item['source_files']) == 0:
+            return 'Invalid request. "source_files" must be a non-empty list', 400
+    
+    self.update_state(state='INPROGRESS', meta={
+            'items': items
+        })
+
+    for item in items:
+        source_file_paths = [os.path.sep.join([DATA_DIR, _file]) for _file in item['source_files']]
+        target_file_path = os.path.sep.join([DATA_DIR, item['target_file']])
+
+        try:
+            video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
+            final_clip = concatenate_videoclips(video_clips)
+            final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
+            item['completed'] = 'succeeded'
+        except Exception as e:
+            item['completed'] = f'failed: {str(e)}'
+
+        self.update_state(state='INPROGRESS', meta={
+                'items': items
+            })
 
     return {
-        'status': 'SUCCEEDED',
-        'info': request_json['target_file']
+        'status': 'SUCCESS',
+        'info': {
+            'items': items
+        }
     }, 200
 
+    
 
 @shared_task(bind=True)
 def _extract_mp3_from_video(self, request_json):
