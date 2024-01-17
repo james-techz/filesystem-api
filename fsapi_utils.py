@@ -195,43 +195,71 @@ def _split_by_interval(self, request_json):
 @shared_task(bind=True)
 def _concat_video_files(self, request_json):
 
-    items = request_json['items']
-    if not isinstance(items, list):
-        return 'Invalid request. "items" must be a list', 400
+    # multiple request
+    if 'items' in request_json:
 
-    # validate the items format
-    for item in items:
-        if item['source_files'] == None or item['target_file'] == None:
-            return 'Invalid request. Each item must contain: source_files, target_file', 400
-        if not isinstance(item['source_files'], list) or len(item['source_files']) == 0:
-            return 'Invalid request. "source_files" must be a non-empty list', 400
-    
-    self.update_state(state='INPROGRESS', meta={
-            'items': items
-        })
+        items = request_json['items']
+        if not isinstance(items, list):
+            return 'Invalid request. "items" must be a list', 400
 
-    for item in items:
-        source_file_paths = [os.path.sep.join([DATA_DIR, _file]) for _file in item['source_files']]
-        target_file_path = os.path.sep.join([DATA_DIR, item['target_file']])
-
-        try:
-            video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
-            final_clip = concatenate_videoclips(video_clips)
-            final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
-            item['completed'] = 'succeeded'
-        except Exception as e:
-            item['completed'] = f'failed: {str(e)}'
-
+        # validate the items format
+        for item in items:
+            if item['source_files'] == None or item['target_file'] == None:
+                return 'Invalid request. Each item must contain: source_files, target_file', 400
+            if not isinstance(item['source_files'], list) or len(item['source_files']) == 0:
+                return 'Invalid request. "source_files" must be a non-empty list', 400
+        
         self.update_state(state='INPROGRESS', meta={
                 'items': items
             })
 
-    return {
-        'status': 'SUCCESS',
-        'info': {
-            'items': items
-        }
-    }, 200
+        for item in items:
+            source_file_paths = [os.path.sep.join([DATA_DIR, _file]) for _file in item['source_files']]
+            target_file_path = os.path.sep.join([DATA_DIR, item['target_file']])
+
+            try:
+                video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
+                final_clip = concatenate_videoclips(video_clips)
+                final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
+                item['completed'] = 'succeeded'
+            except Exception as e:
+                item['completed'] = f'failed: {str(e)}'
+
+            self.update_state(state='INPROGRESS', meta={
+                    'items': items
+                })
+
+        return {
+            'status': 'SUCCESS',
+            'info': {
+                'items': items
+            }
+        }, 200
+    
+    # single request
+    else:
+        
+        if request_json['source_files'] == None or request_json['target_file'] == None:
+            return 'Invalid request. Request body must contain: source_files, target_file', 400
+        if not isinstance(request_json['source_files'], list) or len(request_json['source_files']) == 0:
+            return 'Invalid request. "source_files" must be a non-empty list', 400
+        
+        source_file_paths = [os.path.sep.join([DATA_DIR, _file]) for _file in request_json['source_files']]
+        target_file_path = os.path.sep.join([DATA_DIR, request_json['target_file']])
+        try:
+            video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
+            final_clip = concatenate_videoclips(video_clips)
+            final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
+        except Exception as e:
+            return {
+                'status': 'FAILED',
+                'info': f'ERROR: {str(e)}'
+            }, 500
+
+        return {
+            'status': 'SUCCEEDED',
+            'info': request_json['target_file']
+        }, 200
 
     
 
