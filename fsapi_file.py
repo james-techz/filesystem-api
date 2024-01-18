@@ -102,7 +102,8 @@ class File(Resource):
                 target_full_path = pathlib.Path(os.path.sep.join([DATA_DIR, _file_path]))
                 if target_full_path.is_dir():
                     for entry in target_full_path.rglob('*'):
-                        zipObj.write(entry)
+                        entry_arcname = os.path.sep.join(entry.parts[1:])
+                        zipObj.write(filename=entry, arcname=entry_arcname)
                 else:
                     zipObj.write(target_full_path)
 
