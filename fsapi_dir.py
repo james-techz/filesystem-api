@@ -28,51 +28,79 @@ class Directory(Resource):
     def _create_dir_by_crawl(self, path):
         if request.json['url'] == None:
             return None, 400
-        url = request.json['url']
+        
+        root_url = request.json['url']
         full_path = os.path.sep.join([DATA_DIR, path])
         os.makedirs(full_path, exist_ok=True)
 
-        # send GET to the target URL
-        response = urlopen(url)
-        if response.status not in [200]:
-            return {'error_message': f'{url}: {response.status} - {response.reason}'}
+        page_set = set()
+        item_set = set()
 
-        # read / parse the target website to get links
-        html = response.read()
-        soup = BeautifulSoup(html, 'html.parser')
-        tds: ResultSet = soup.find_all('td')
-        SKIP_LINKS = ['/', '../', './', '..', '.', '?C=N;O=D', '']
-        # ONLY_SUFFIX = '.html'
+        def _get_links_per_page(url):
+            # send GET to the target URL
+            response = urlopen(url)
+            if response.status not in [200]:
+                print({'error_message': f'{url}: {response.status} - {response.reason}'}) 
 
-        # construct link lists
-        # filtered_links = [link['href'] for td in tds if link['href'] not in SKIP_LINKS ]
-        filtered_links = []
-        for td in tds:
-            for child in td.contents:
-                if child.name == 'a' and child['href'] not in SKIP_LINKS:
-                    filtered_links.append(child['href'])
+            html = response.read()
+            soup = BeautifulSoup(html, 'html.parser')
+            tds: ResultSet = soup.find_all('td')
+            SKIP_LINKS = ['/', '../', './', '..', '.', '?C=N;O=D', '']
 
-        filtered_full_links = [f"{url}/{link}" for link in filtered_links]
+            # construct link lists from HTML table
+            for td in tds:
+                for child in td.contents:
+                    if child.name == 'a':
+                        # skip Parent Directory link
+                        # and links in blacklist SKIP_LINKS
+                        if child.contents[0] == 'Parent Directory' \
+                            or child['href'] in SKIP_LINKS:
+                            continue
+                        
+                        href = child['href']
+                        # add prefix to relative links to construct a complete URL
+                        if href[:4] != 'http':
+                            if url[-1] == '/':
+                                href = url + href
+                            else:
+                                href = url + '/' + href
+                        # separate directories vs files into each set
+                        if href[-1] == '/':
+                            page_set.add(href)
+                        else:
+                            item_set.add(href)
+        
+        # init the root URL
+        page_set.add(root_url)
+        while len(page_set) > 0:
+            url = page_set.pop()
+            _get_links_per_page(url)
 
         def exception_request(request, exception):
             print(f"{request.url}: {exception}")
 
         def response_callback(response: Response, *args, **kwargs):
-            splits = [part for part in response.url.split('/') if part != '']
-            if len(splits) < 2:
-                print(f'Cannot determine filename from he URL: {response.url}')
+            filepath = str(response.url).replace(root_url, '')
+            splits = [part for part in filepath.split('/') if part != '']
+            if len(splits) < 1:
+                print(f'Cannot determine filename from the URL: {response.url}')
                 return response
-            filename = splits[-1]
+                                
             if response.status_code == 200:
-                full_name = os.path.sep.join([full_path, filename])
+                parent_path = splits[:-1]
+                os.makedirs(os.sep.join([full_path] + parent_path), exist_ok=True)
+                full_name = os.path.sep.join([full_path] + splits)
                 with open(full_name, 'wb') as f:
                     f.write(response.content)
+            else:
+                print(f'Error code {response.status_code} getting URL: {response.url}')
+
             return response
 
         # smultaneously get the links to speed up
         session = requests_cache.CachedSession(cache_name='my_cache')
         results = grequests.map(
-            (grequests.get(u, session=session, callback=response_callback) for u in filtered_full_links),
+            (grequests.get(u, session=session, callback=response_callback) for u in item_set),
             exception_handler=exception_request,
             size=10,
         )
