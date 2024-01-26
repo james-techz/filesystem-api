@@ -105,7 +105,8 @@ class File(Resource):
                         entry_arcname = os.path.sep.join(entry.parts[1:])
                         zipObj.write(filename=entry, arcname=entry_arcname)
                 else:
-                    zipObj.write(target_full_path)
+                    arc_name = os.path.sep.join(target_full_path.parts[1:])
+                    zipObj.write(target_full_path, arcname=arc_name)
 
         return File().get(path) 
     
