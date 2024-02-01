@@ -110,6 +110,26 @@ class File(Resource):
 
         return File().get(path) 
     
+    def _create_file_by_zip_v2(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        if 'files' not in request.json:
+            return None, 400
+        files = request.json['files']
+        if not isinstance(files, list):
+            return None, 400
+        with ZipFile(full_path, 'x') as zipObj:
+            for _file_path in files:
+                target_full_path = pathlib.Path(os.path.sep.join([DATA_DIR, _file_path]))
+                if target_full_path.is_dir():
+                    for entry in target_full_path.rglob('*'):
+                        entry_arcname = str(entry).replace(str(target_full_path), '')
+                        zipObj.write(filename=entry, arcname=entry_arcname)
+                else:
+                    arc_name = os.path.sep.join(target_full_path.parts[1:])
+                    zipObj.write(target_full_path, arcname=arc_name)
+
+        return File().get(path) 
+    
     def _create_file_by_text_concat(self, path):
         full_path = os.path.sep.join([DATA_DIR, path])
         if 'files' not in request.json:
@@ -140,6 +160,8 @@ class File(Resource):
         # create new file by zip multiple files
         elif request.args['action'] == 'zip':
             return self._create_file_by_zip(path)
+        elif request.args['action'] == 'zip_v2':
+            return self._create_file_by_zip_v2(path)
         # create new file by concat multiple files
         elif request.args['action'] == 'concat':
             return self._create_file_by_text_concat(path)
