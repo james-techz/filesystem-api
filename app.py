@@ -7,7 +7,7 @@ from fsapi_utils import *
 from fsapi_file import File, \
     TextSearchRequest, TextReplaceRequest, \
     BatchFileCopyRequest, MIDIRequest, WAVRequest, \
-    BatchThumbnailRequest
+    BatchThumbnailRequest, AHKScript
 from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
@@ -55,6 +55,7 @@ api.add_resource(SRTRequest, '/srtrequest', '/srtrequest/')
 api.add_resource(MusicGen, '/musicgen', '/musicgen/')
 api.add_resource(AudioGen, '/audiogen', '/audiogen/')
 api.add_resource(MusicGenMelody, '/musicgenmelody', '/musicgenmelody/')
+api.add_resource(AHKScript, '/ahkscript', '/ahkscript/')
 
 from celery import Celery, Task
 

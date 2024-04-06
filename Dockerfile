@@ -6,19 +6,15 @@ FROM python:3.8.18-slim-bullseye AS base-stage
 ENV PYTHONUNBUFFERED=1
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 RUN mkdir /app && adduser -u 1000 --disabled-password --gecos "" appuser && chown -R appuser /app
-RUN --mount=type=cache,target=/var/cache/apt apt-get update -y 
-
 
 ### BASE-DEPLOY STAGE ###
 FROM base-stage AS base-deploy-stage
-RUN --mount=type=cache,target=/var/cache/apt apt-get install net-tools procps ffmpeg fluidsynth  -y
-
+RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install openssh-client git net-tools procps ffmpeg fluidsynth -y
 
 
 ### BASE_BUILD STAGE ###
 FROM base-deploy-stage AS base-build-stage
-RUN --mount=type=cache,target=/var/cache/apt apt-get install git autoconf automake pkg-config libtool build-essential libasound2-dev libjack-dev portaudio19-dev -y 
-
+RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install autoconf automake pkg-config libtool build-essential libasound2-dev libjack-dev portaudio19-dev -y 
 
 ### BUILD STAGE ### 
 FROM base-build-stage as build-stage

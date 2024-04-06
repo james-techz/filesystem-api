@@ -27,6 +27,10 @@ ADMIN_PASSWD = os.environ.get('ADMIN_PASSWD', None)
 JWT_ALGO = 'HS256'
 READ_CHUNK_BYTE = 4096
 
+AHK_SERVER = os.environ.get('AHK_SERVER', None)
+AHK_SERVER_PORT = os.environ.get('AHK_SERVER_PORT', None)
+AHK_SERVER_USER = os.environ.get('AHK_SERVER_USER', None)
+
 # https://u2i0qhej2tuzfzbq.eu-west-1.aws.endpoints.huggingface.cloud
 HF_MUSIC_API_URL = os.environ.get('HF_MUSIC_API_URL', None)
 HF_MUSIC_API_TOKEN = os.environ.get('HF_MUSIC_API_TOKEN', None)
