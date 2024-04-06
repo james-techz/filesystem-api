@@ -410,3 +410,171 @@ class BatchThumbnailRequest(Resource):
         pathlib.Path(thumbnail_dir_fullpath).mkdir(parents=True, exist_ok=True)
         async_result = _batch_thumbnail.delay(thumbnail_dir_fullpath, videos, images)
         return {"task_id": async_result.id}
+
+class AHKScript(Resource):
+    ROOT_DIR = 'Desktop\\ahkscript'
+    DATA_DIR = 'Desktop\\ahkdata'
+
+    @require_token
+    @os_exception_handle
+    def post(self):
+        import subprocess
+        import importlib
+        importlib.reload(subprocess)
+
+        if 'files' not in request.json:
+            return {"error_message": "'files' not found"}, 400
+        
+        files = request.json['files']
+        if not isinstance(files, list):
+            return {"error_message": "'files' must be a list"}, 400
+
+        results = []
+        for file in files:
+            full_path = os.path.sep.join([DATA_DIR, file])
+            filename = file.split(os.sep)[-1]
+            status = 'OK'
+            print(full_path)
+            try:
+                cmd = ["scp", "-P", AHK_SERVER_PORT, full_path, f"{AHK_SERVER_USER}@{AHK_SERVER}:{AHKScript.ROOT_DIR}\\{filename}"]
+                print(cmd)
+                print(os.path.abspath(os.path.curdir))
+                result = subprocess.run(cmd, capture_output=True)
+                print(result.stdout)
+                print(result.stderr)
+                err = result.stderr.decode('utf-8')
+                if err == '':
+                    results.append({
+                        'file': file,
+                        'status': status,
+                    })
+                else:
+                    status = 'ERROR'
+                    results.append({
+                        'file': file,
+                        'status': status,
+                        'error_message': err,
+                    })
+
+            except OSError as e:
+                msg = e.strerror
+                status = 'ERROR'
+                results.append({
+                    'file': file,
+                    'status': status,
+                    'error_message': msg,
+                })
+
+        response = {
+            'results': results
+        }
+        
+        return response, 200
+    
+    def _list(self, directory):
+        import subprocess
+        import importlib
+        importlib.reload(subprocess)
+        directory = "" if directory is None else directory
+        result = {}
+        try:
+            cmd = ["ssh", "-p", AHK_SERVER_PORT, f"{AHK_SERVER_USER}@{AHK_SERVER}", f"dir {AHKScript.DATA_DIR}\\{directory}"]
+            print(cmd)
+            result = subprocess.run(cmd, capture_output=True)
+            print(result.stdout)
+            print(result.stderr)
+            err = result.stderr.decode('utf-8')
+            if err == '':
+                # only take files and directories lines, without '.' and '..'
+                lines = result.stdout.splitlines()
+                items = [line.decode("utf-8") for index, line in enumerate(lines) if index >= 7 and index <= len(lines) - 3]
+                # filter directories only
+                dirs = [item.split(' ')[-1] for item in items if '<DIR>' in item]
+                # filter files only
+                files = [item.split(' ')[-1] for item in items if '<DIR>' not in item]
+                
+                result = {
+                    'files': files,
+                    'dirs': dirs
+                }
+                
+            else:
+                status = 'ERROR'
+                result = {
+                    'status': status,
+                    'error_message': err,
+                }
+
+        except OSError as e:
+            msg = e.strerror
+            status = 'ERROR'
+            print(msg)
+            result = {
+                'status': status,
+                'error_message': msg,
+            }
+
+        response = {
+            'result': result
+        }
+        
+        return response, 200
+    
+    def _get_file(self, filename):
+        import subprocess
+        import importlib
+        importlib.reload(subprocess)
+        result = {}
+        remote_path = f"{AHKScript.DATA_DIR}\\{filename}"
+        local_path = os.sep.join([DATA_DIR, filename])
+        try:
+            cmd = ["scp", "-P", AHK_SERVER_PORT, "-T", f"{AHK_SERVER_USER}@{AHK_SERVER}:{remote_path}", local_path]
+            print(cmd)
+            result = subprocess.run(cmd, capture_output=True)
+            print(result.stdout)
+            print(result.stderr)
+
+            err = result.stderr.decode('utf-8')
+            if err == '':
+                result = {
+                    'file': filename,
+                    'status': 'OK'
+                }
+                
+            else:
+                result = {
+                    'status': 'ERROR',
+                    'error_message': err,
+                }
+
+        except OSError as e:
+            msg = e.strerror
+            status = 'ERROR'
+            print(msg)
+            result = {
+                'status': status,
+                'error_message': msg,
+            }
+
+        response = {
+            'result': result
+        }
+        
+        return response, 200
+
+    @require_token
+    @os_exception_handle
+    def get(self):
+        
+        if 'action' not in request.args:
+            return {"error_message": "'action' not found"}, 400
+        
+        action = request.args.get('action')
+        if action == 'get' and 'file' not in request.args:
+            return {"error_message": "'action' is 'get' but 'file' is not specified"}, 400
+
+        if action == 'list':
+            return self._list(request.args.get('directory', None))
+        elif action == 'get':
+            return self._get_file(request.args.get('file', None))
+        
