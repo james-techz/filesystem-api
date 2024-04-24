@@ -25,6 +25,7 @@ RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3
 COPY tensorflow-2.7.4-cp38-cp38-manylinux2010_x86_64.whl .
 RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install ./tensorflow-2.7.4-cp38-cp38-manylinux2010_x86_64.whl
 COPY requirements.txt .
+RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install Cython==3.0.10
 RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install -r requirements.txt
 
 
