@@ -1,7 +1,8 @@
 from flask_restful import Resource
 from fsapi_utils import *
 from fsapi_utils import _create_file_by_youtube_download, _create_file_by_mp3_concat, \
-    _create_wave_from_midi_sf, _create_wave_from_cut, _batch_thumbnail
+    _create_wave_from_midi_sf, _create_wave_from_cut, _batch_thumbnail, \
+    _create_wave_from_cut_multiple
 from flask import request, Response
 from urllib.request import urlopen
 from zipfile import ZipFile
@@ -9,7 +10,10 @@ import os
 import pathlib
 import shutil
 import pretty_midi
-
+from madmom.features.beats import RNNBeatProcessor
+from madmom.features.downbeats import RNNDownBeatProcessor, DBNDownBeatTrackingProcessor
+from madmom.features.tempo import TempoEstimationProcessor
+from madmom.features.key import CNNKeyRecognitionProcessor
 
 class File(Resource):
 
@@ -390,7 +394,83 @@ class WAVRequest(Resource):
         else:
             return {"error_message": "'action' is not defined"}
         
+class BatchWAVRequest(Resource):
+    @require_token
+    @os_exception_handle
+    def post(self):
         
+        action = request.json.get('action', '')
+        if action == 'from_wav_cut_multiple':
+            if 'wav_file' not in request.json \
+                or 'segments' not in request.json \
+                or not isinstance(request.json['segments'], list):
+                    return {"error_message": "'wav_file' or 'segments' not found or invalid"}, 400
+            
+            async_result = _create_wave_from_cut_multiple.delay(request.json['wav_file'], request.json['segments'])
+            return {"task_id": async_result.id}
+
+        else:
+            return {"error_message": "'action' is not defined or invalid"}
+        
+class WaveForm(Resource):
+    @require_token
+    @os_exception_handle
+    def post(self):
+        action = request.json.get('action', '')
+        if action == 'waveform_from_file':
+            if 'wav_file' not in request.json \
+                or 'output_file' not in request.json:
+                return {"error_message": "'wav_file' or 'output_file' not found or invalid"}, 400
+            wav_file_path = os.sep.join([DATA_DIR, request.json['wav_file']])
+            output_file_path = os.sep.join([DATA_DIR, request.json['output_file']])
+            
+            pathlib.Path(output_file_path).parent.mkdir(parents=True, exist_ok=True)
+            import subprocess
+            import importlib
+            importlib.reload(subprocess)
+            completed_process = subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-i', wav_file_path, '-filter_complex', 'showwavespic', '-frames:v', '1', output_file_path], capture_output=True)
+            result = request.json
+            if len(completed_process.stderr) > 0:
+                result['result'] = completed_process.stderr.decode('utf-8')
+            else:
+                result['result'] = 'OK'
+            return result
+
+        else:
+            return {"error_message": "'action' is not defined or invalid"}
+    
+class MusicExtract(Resource):
+
+    @require_token
+    @os_exception_handle
+    def post(self):
+        action = request.json.get('action', '')
+        if action == 'extract_music_info':
+            if 'wav_file' not in request.json:
+                return {"error_message": "'wav_file' not found or invalid"}, 400
+
+            wav_file_path = os.sep.join([DATA_DIR, request.json['wav_file']])
+            result = request.json
+
+            import subprocess
+            import importlib
+            importlib.reload(subprocess)
+
+            beat_act = RNNBeatProcessor()(wav_file_path)
+            downbeat_act = RNNDownBeatProcessor()(wav_file_path)
+            downbeat_proc = DBNDownBeatTrackingProcessor(beats_per_bar=[4], fps=60)
+            tempo_proc = TempoEstimationProcessor(fps=60)
+            key_proc = CNNKeyRecognitionProcessor()
+
+            result = {
+                "downbeat": downbeat_proc(downbeat_act).tolist(),
+                "tempo": tempo_proc(beat_act).tolist(), 
+                "key": key_proc(wav_file_path).tolist(),
+            }
+            return result
+        else:
+            return {"error_message": "'action' is not defined or invalid"}
+
 class BatchThumbnailRequest(Resource):
     @require_token
     @os_exception_handle
