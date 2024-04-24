@@ -27,6 +27,9 @@ RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3
 COPY requirements.txt .
 RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install Cython==3.0.10
 RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install -r requirements.txt
+RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install madmom==0.16.1
+RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install -U mido==1.2.6
+
 
 
 ### DEPLOY STAGE ###
