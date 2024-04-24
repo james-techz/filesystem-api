@@ -7,7 +7,8 @@ from fsapi_utils import *
 from fsapi_file import File, \
     TextSearchRequest, TextReplaceRequest, \
     BatchFileCopyRequest, MIDIRequest, WAVRequest, \
-    BatchThumbnailRequest, AHKScript
+    BatchThumbnailRequest, AHKScript, BatchWAVRequest, \
+    WaveForm, MusicExtract
 from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
@@ -47,6 +48,8 @@ api.add_resource(TextReplaceRequest, '/textreplace', '/textreplace/')
 api.add_resource(BatchFileCopyRequest, '/batchcopy', '/batchcopy/')
 api.add_resource(MIDIRequest, '/midi/<path:path>')
 api.add_resource(WAVRequest, '/wav/<path:path>')
+api.add_resource(BatchWAVRequest, '/batchwav', '/batchwav/')
+api.add_resource(WaveForm, '/waveform', '/waveform/')
 api.add_resource(ImageOperation, '/image', '/image/')
 api.add_resource(MIDIGenerator, '/midigenerate', '/midigenerate/')
 api.add_resource(BatchThumbnailRequest, '/batchthumbnail', '/batchthumbnail/')
@@ -56,6 +59,7 @@ api.add_resource(MusicGen, '/musicgen', '/musicgen/')
 api.add_resource(AudioGen, '/audiogen', '/audiogen/')
 api.add_resource(MusicGenMelody, '/musicgenmelody', '/musicgenmelody/')
 api.add_resource(AHKScript, '/ahkscript', '/ahkscript/')
+api.add_resource(MusicExtract, '/musicextract', '/musicextract/')
 
 from celery import Celery, Task
 

@@ -343,6 +343,28 @@ def _create_wave_from_cut(self, path, wav_file, from_time, to_time):
         }
     
 
+@shared_task(bind=True)
+@os_exception_handle
+def _create_wave_from_cut_multiple(self, wav_file, segments):
+    full_wav_file = os.path.sep.join([DATA_DIR, wav_file])
+    audio = AudioSegment.from_wav(full_wav_file)
+    results = []
+    for segment in segments:
+        output_file = os.path.sep.join([DATA_DIR, segment['filepath']])
+        t1 = segment['from_time'] * 1000 # Works in milliseconds
+        t2 = segment['to_time'] * 1000
+        if t1 < 0:
+            segment['result'] = 'from_time is negative of wav file range'
+        else:
+            pathlib.Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+            newAudio = audio[t1:t2]
+            newAudio.export(output_file, format="wav") # Exports to a wav file in the current path.
+            segment['result'] = 'OK'
+        results.append(segment)
+        
+    return {
+        'result': results
+    }
 
 
 @shared_task(bind=True)
