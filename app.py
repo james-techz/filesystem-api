@@ -9,7 +9,6 @@ from fsapi_file import File, \
     BatchFileCopyRequest, MIDIRequest, WAVRequest, \
     BatchThumbnailRequest, AHKScript, BatchWAVRequest, \
     WaveForm
-# , MusicExtract
 from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
@@ -60,7 +59,6 @@ api.add_resource(MusicGen, '/musicgen', '/musicgen/')
 api.add_resource(AudioGen, '/audiogen', '/audiogen/')
 api.add_resource(MusicGenMelody, '/musicgenmelody', '/musicgenmelody/')
 api.add_resource(AHKScript, '/ahkscript', '/ahkscript/')
-# api.add_resource(MusicExtract, '/musicextract', '/musicextract/')
 
 from celery import Celery, Task
 
