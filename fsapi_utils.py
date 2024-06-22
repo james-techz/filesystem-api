@@ -170,25 +170,25 @@ def _split_by_interval(self, request_json):
     shortname = source_file_name.split('.')[0]
     ext = '.mp4'
 
-    video = VideoFileClip(source_file_path)
-    total_duration = video.duration
-    
-    iteration = 0
-    start_time = iteration * time_interval
-    end_time = start_time + time_interval
     clip_names = []
-    while start_time <= total_duration:
-        if end_time > total_duration:
-            end_time = total_duration
-        clip = video.subclip(start_time, end_time)
-        clip_name = f'{shortname}-{"%04d" % (iteration,)}{ext}'
-        clip_names.append(clip_name)
-        clip_path = os.path.sep.join([target_directory, clip_name])
-        clip.write_videofile(clip_path, audio=True, audio_codec='aac')
-        iteration += 1
+    with VideoFileClip(source_file_path) as video:
+        total_duration = video.duration
+        iteration = 0
         start_time = iteration * time_interval
         end_time = start_time + time_interval
-        print("-----------------???-----------------")
+        
+        while start_time <= total_duration:
+            if end_time > total_duration:
+                end_time = total_duration
+            clip = video.subclip(start_time, end_time)
+            clip_name = f'{shortname}-{"%04d" % (iteration,)}{ext}'
+            clip_names.append(clip_name)
+            clip_path = os.path.sep.join([target_directory, clip_name])
+            clip.write_videofile(clip_path, audio=True, audio_codec='aac')
+            iteration += 1
+            start_time = iteration * time_interval
+            end_time = start_time + time_interval
+            print("-----------------???-----------------")
 
     return {
         'status': 'SUCCEEDED',
@@ -226,6 +226,9 @@ def _concat_video_files(self, request_json):
                 video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
                 final_clip = concatenate_videoclips(video_clips)
                 final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
+                final_clip.close()
+                for clip in video_clips:
+                    clip.close()
                 item['completed'] = 'succeeded'
             except Exception as e:
                 item['completed'] = f'failed: {str(e)}'
@@ -256,6 +259,9 @@ def _concat_video_files(self, request_json):
             video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
             final_clip = concatenate_videoclips(video_clips)
             final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
+            final_clip.close()
+            for clip in video_clips:
+                clip.close()
         except Exception as e:
             return {
                 'status': 'FAILED',
@@ -284,7 +290,7 @@ def _extract_mp3_from_video(self, request_json):
     try:
         video = VideoFileClip(source_file_path)
         video.audio.write_audiofile(filename=target_file, bitrate=bitrate, write_logfile=True)
-
+        video.close()
         return {
             'status': 'SUCCEEDED',
             'info': target_file
