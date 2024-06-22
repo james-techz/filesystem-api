@@ -12,7 +12,6 @@ from fsapi_file import File, \
 from fsapi_video import VideoListRequest, VideoOperation
 from fsapi_image import ImageOperation
 from fsapi_bgtask import BackgroundTask
-from fsapi_midi import MIDIGenerator
 from fsapi_html import SVGRequest
 from fsapi_srt import SRTRequest
 from fsapi_musicgen import MusicGen, AudioGen, MusicGenMelody
@@ -51,7 +50,6 @@ api.add_resource(WAVRequest, '/wav/<path:path>')
 api.add_resource(BatchWAVRequest, '/batchwav', '/batchwav/')
 api.add_resource(WaveForm, '/waveform', '/waveform/')
 api.add_resource(ImageOperation, '/image', '/image/')
-api.add_resource(MIDIGenerator, '/midigenerate', '/midigenerate/')
 api.add_resource(BatchThumbnailRequest, '/batchthumbnail', '/batchthumbnail/')
 api.add_resource(SVGRequest, '/svgrequest', '/svgrequest/')
 api.add_resource(SRTRequest, '/srtrequest', '/srtrequest/')
@@ -75,7 +73,6 @@ def celery_init_app(app: Flask):
     return celery_app
 
 celery_app = celery_init_app(app)
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=DEBUG)

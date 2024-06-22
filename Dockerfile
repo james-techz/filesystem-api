@@ -22,8 +22,6 @@ USER appuser
 # Install pip requirements
 WORKDIR /home/appuser
 RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install --upgrade pip
-COPY tensorflow-2.7.4-cp38-cp38-manylinux2010_x86_64.whl .
-RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install ./tensorflow-2.7.4-cp38-cp38-manylinux2010_x86_64.whl
 COPY requirements.txt .
 RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3 -m pip install -r requirements.txt
 
@@ -34,7 +32,7 @@ USER appuser
 # Copy pre-built python environment
 COPY --from=build-stage /home/appuser/.local /home/appuser/.local
 # Copy code
-COPY *.py *.conf *.txt *.sh *.mag Dockerfile /app/
+COPY *.py *.conf *.txt *.sh Dockerfile /app/
 WORKDIR /app
 EXPOSE 5000
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug

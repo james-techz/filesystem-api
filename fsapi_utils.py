@@ -321,7 +321,6 @@ def _create_wave_from_midi_sf(self, path, midi_file, sf_file):
 
 
 @shared_task(bind=True)
-@os_exception_handle
 def _create_wave_from_cut(self, path, wav_file, from_time, to_time):
     
     full_path = os.path.sep.join([DATA_DIR, path])
@@ -344,7 +343,6 @@ def _create_wave_from_cut(self, path, wav_file, from_time, to_time):
     
 
 @shared_task(bind=True)
-@os_exception_handle
 def _create_wave_from_cut_multiple(self, wav_file, segments):
     full_wav_file = os.path.sep.join([DATA_DIR, wav_file])
     audio = AudioSegment.from_wav(full_wav_file)
