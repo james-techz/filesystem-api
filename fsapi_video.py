@@ -1,35 +1,9 @@
 from flask_restful import Resource
 from flask import request
 from fsapi_utils import os_exception_handle, require_token, DATA_DIR, \
-    _split_by_interval, _concat_video_files, _extract_mp3_from_video
+    _split_by_interval, _concat_video_files, _extract_mp3_from_video, _read_video_metadata
 import os 
 import cv2
-
-
-def _read_video_metadata(full_path: str):
-    # read video file using cv2
-    video = cv2.VideoCapture(full_path)
-    if not video.isOpened():
-        _metadata = {
-            'path': full_path,
-            'status': 'READ_FAILED',
-            'frames': -1,
-            'fps': -1,
-            'duration_seconds': -1
-        }
-    else:
-        # get video info
-        fps = video.get(cv2.CAP_PROP_FPS)
-        frames = video.get(cv2.CAP_PROP_FRAME_COUNT)
-        duration_seconds = round(frames / fps, 2)
-        _metadata = {
-            'path': full_path,
-            'status': 'READ_SUCCESS',
-            'frames': frames,
-            'fps': fps,
-            'duration_seconds': duration_seconds
-        }
-    return _metadata
 
 
 class VideoListRequest(Resource):
