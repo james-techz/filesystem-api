@@ -8,6 +8,9 @@ from celery import shared_task
 import json
 from pydub import AudioSegment
 from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy.video.fx.fadein import fadein
+from moviepy.video.fx.fadeout import fadeout
+
 from urllib.request import urlopen
 import cv2
 import pathlib
@@ -221,9 +224,10 @@ def _concat_video_files(self, request_json):
             source_file_paths = [os.path.sep.join([DATA_DIR, _file]) for _file in item['source_files']]
             target_file_path = os.path.sep.join([DATA_DIR, item['target_file']])
             pathlib.Path(target_file_path).parent.mkdir(parents=True, exist_ok=True)
-
+            fadein_duration = item.get('fadein', 0)
+            fadeout_duration = item.get('fadeout', 0)
             try:
-                video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
+                video_clips = [fadeout(fadein(VideoFileClip(file_path), fadein_duration), fadeout_duration) for file_path in source_file_paths]
                 final_clip = concatenate_videoclips(video_clips)
                 final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
                 for clip in video_clips: 
@@ -254,9 +258,11 @@ def _concat_video_files(self, request_json):
         
         source_file_paths = [os.path.sep.join([DATA_DIR, _file]) for _file in request_json['source_files']]
         target_file_path = os.path.sep.join([DATA_DIR, request_json['target_file']])
+        fadein_duration = request_json.get('fadein', 0)
+        fadeout_duration = request_json.get('fadeout', 0)
         pathlib.Path(target_file_path).parent.mkdir(parents=True, exist_ok=True)
         try:
-            video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
+            video_clips = [fadeout(fadein(VideoFileClip(file_path), fadein_duration), fadeout_duration) for file_path in source_file_paths]
             final_clip = concatenate_videoclips(video_clips)
             final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
             for clip in video_clips: 
