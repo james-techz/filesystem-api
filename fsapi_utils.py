@@ -82,6 +82,38 @@ def require_token(f):
     return _inner_func
 
 
+def _read_video_metadata(full_path: str):
+    # read video file using cv2
+    video = cv2.VideoCapture(full_path)
+    if not video.isOpened():
+        _metadata = {
+            'path': full_path,
+            'status': 'READ_FAILED',
+            'frames': -1,
+            'fps': -1,
+            'duration_seconds': -1,
+            'frame_width': -1,
+            'frame_height': -1
+        }
+    else:
+        # get video info
+        fps = video.get(cv2.CAP_PROP_FPS)
+        frames = video.get(cv2.CAP_PROP_FRAME_COUNT)
+        width = video.get(cv2.CAP_PROP_FRAME_WIDTH)
+        height = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        duration_seconds = round(frames / fps, 2)
+        _metadata = {
+            'path': full_path,
+            'status': 'READ_SUCCESS',
+            'frames': frames,
+            'fps': fps,
+            'duration_seconds': duration_seconds,
+            'frame_width': width,
+            'frame_height': height
+        }
+    return _metadata
+
+
 @shared_task(bind=True)
 def _create_file_by_youtube_download(self, path, request_json):
     full_path = os.path.sep.join([DATA_DIR, path])
@@ -226,9 +258,22 @@ def _concat_video_files(self, request_json):
             pathlib.Path(target_file_path).parent.mkdir(parents=True, exist_ok=True)
             fadein_duration = item.get('fadein', 0)
             fadeout_duration = item.get('fadeout', 0)
+            
+            widths = set()
+            heights = set()
+            for source_video in source_file_paths:
+                meta = _read_video_metadata(source_video)
+                widths.add(meta['frame_width'])
+                heights.add(meta['frame_height'])
+            
+            if (len(widths) * len(heights)) == 1:
+                concat_method = "chain"
+            else:
+                concat_method = "compose"
+
             try:
                 video_clips = [fadeout(fadein(VideoFileClip(file_path), fadein_duration), fadeout_duration) for file_path in source_file_paths]
-                final_clip = concatenate_videoclips(video_clips)
+                final_clip = concatenate_videoclips(video_clips, method = concat_method)
                 final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
                 for clip in video_clips: 
                     clip.close()
@@ -261,9 +306,21 @@ def _concat_video_files(self, request_json):
         fadein_duration = request_json.get('fadein', 0)
         fadeout_duration = request_json.get('fadeout', 0)
         pathlib.Path(target_file_path).parent.mkdir(parents=True, exist_ok=True)
+        widths = set()
+        heights = set()
+        for source_video in source_file_paths:
+            meta = _read_video_metadata(source_video)
+            widths.add(meta['frame_width'])
+            heights.add(meta['frame_height'])
+        
+        if (len(widths) * len(heights)) == 1:
+            concat_method = "chain"
+        else:
+            concat_method = "compose"
+
         try:
             video_clips = [fadeout(fadein(VideoFileClip(file_path), fadein_duration), fadeout_duration) for file_path in source_file_paths]
-            final_clip = concatenate_videoclips(video_clips)
+            final_clip = concatenate_videoclips(video_clips, method = concat_method)
             final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
             for clip in video_clips: 
                 clip.close()
