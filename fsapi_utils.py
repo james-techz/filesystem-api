@@ -223,12 +223,9 @@ def _concat_video_files(self, request_json):
             pathlib.Path(target_file_path).parent.mkdir(parents=True, exist_ok=True)
 
             try:
-                video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
-                final_clip = concatenate_videoclips(video_clips)
-                final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
-                final_clip.close()
-                for clip in video_clips:
-                    clip.close()
+                with [VideoFileClip(file_path) for file_path in source_file_paths] as video_clips:
+                    with concatenate_videoclips(video_clips) as final_clip:
+                        final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
                 item['completed'] = 'succeeded'
             except Exception as e:
                 item['completed'] = f'failed: {str(e)}'
@@ -256,12 +253,9 @@ def _concat_video_files(self, request_json):
         target_file_path = os.path.sep.join([DATA_DIR, request_json['target_file']])
         pathlib.Path(target_file_path).parent.mkdir(parents=True, exist_ok=True)
         try:
-            video_clips = [VideoFileClip(file_path) for file_path in source_file_paths]
-            final_clip = concatenate_videoclips(video_clips)
-            final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
-            final_clip.close()
-            for clip in video_clips:
-                clip.close()
+            with [VideoFileClip(file_path) for file_path in source_file_paths] as video_clips:
+                with concatenate_videoclips(video_clips) as final_clip:
+                    final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
         except Exception as e:
             return {
                 'status': 'FAILED',
@@ -288,9 +282,8 @@ def _extract_mp3_from_video(self, request_json):
         bitrate = None
 
     try:
-        video = VideoFileClip(source_file_path)
-        video.audio.write_audiofile(filename=target_file, bitrate=bitrate, write_logfile=True)
-        video.close()
+        with VideoFileClip(source_file_path) as video:
+            video.audio.write_audiofile(filename=target_file, bitrate=bitrate, write_logfile=True)
         return {
             'status': 'SUCCEEDED',
             'info': target_file
