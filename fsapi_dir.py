@@ -195,6 +195,56 @@ class Directory(Resource):
 
         return self.get(path)
 
+    def _create_dir_by_multiple_scrape(self, path):
+        full_path = os.path.sep.join([DATA_DIR, path])
+        os.makedirs(full_path, exist_ok=True)
+
+        if 'urls' not in request.json:
+            return {
+                'error_message': '"urls" not in request body'
+            }, 400
+        urls = request.json['urls']
+        if not isinstance(urls, list):
+            return {
+                'error_message': '"urls" must be a list'
+            }, 400
+        
+        results = []
+
+        def exception_request(request, exception):
+            result = {
+                'url': request.url
+            }
+            result['status'] = 'ERROR'
+            result['error_message'] = exception
+            results.append(result)
+
+        def response_callback(response: Response, *args, **kwargs):
+            filename = str(response.url).split("/")[-1]
+            full_filename = os.sep.join([full_path, filename])
+            result = {
+                'url': response.url
+            }
+
+            if response.status_code == 200:
+                with open(full_filename, 'wb') as f:
+                    f.write(response.content)
+                result['status'] = 'SUCCESS'
+            else:
+                result['status'] = 'ERROR'
+                result['error_message'] = f'{response.url}: {response.status_code}'
+            results.append(result)
+
+        # smultaneously get the links to speed up
+        grequests.map(
+            (grequests.get(u, callback=response_callback) for u in urls),
+            exception_handler=exception_request,
+            size=10,
+        )
+
+        return {
+            "results": results
+        }, 200
 
 
     @require_token
@@ -218,6 +268,8 @@ class Directory(Resource):
             return self._create_dir_by_clone(path)
         elif action == 'crawl':
             return self._create_dir_by_crawl(path)
+        elif action == 'multiple_scrape':
+            return self._create_dir_by_multiple_scrape(path)
         elif action == 'split':
             return self._create_dir_by_split(path)
         elif action == 'video_extract':
