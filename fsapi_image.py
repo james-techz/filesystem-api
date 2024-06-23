@@ -38,6 +38,34 @@ class ImageOperation(Resource):
         else:
             return 'Operation failed. Please check the server log for more info'
         
+    @os_exception_handle
+    def _get_image_info(self, request_json):
+        if 'paths' not in request_json or not isinstance(request_json['paths'], list):
+            return '"paths" missing or not a list', 400
+        
+        paths = request_json['paths']
+        results = []
+        for path in paths:
+            result = {
+                'path': path
+            }
+            full_path = os.sep.join([DATA_DIR, path])
+            image = cv2.imread(full_path, cv2.IMREAD_UNCHANGED)
+            if image is None:
+                result['status'] = 'ERROR'
+                result['error_message'] = os.strerror(errno.ENOENT)
+            else:
+                result['size'] ={
+                    "width": image.shape[1],
+                    "height": image.shape[0]
+                }
+
+            results.append(result)
+        
+        return {
+            'results': results
+        }
+        
 
     @require_token
     @os_exception_handle
@@ -50,14 +78,16 @@ class ImageOperation(Resource):
             new_path = request.json['new_path']
             width = request.json['width']
             height = request.json['height']
-
             return self._resize_image(path, new_path, width, height)
         
-        if request.json['action'] == 'crop':
+        elif request.json['action'] == 'crop':
             path = request.json['path']
             new_path = request.json['new_path']
             x1, y1, x2, y2 = request.json['x1'], request.json['y1'], request.json['x2'], request.json['y2']
-
             return self._crop_image(path, new_path, x1, y1, x2, y2)
+
+        elif request.json['action'] == 'info':
+            return self._get_image_info(request.json)
+        
         else:
             return f'Invalid request. Invalid action: {request.json["action"]}', 400
