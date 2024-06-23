@@ -432,6 +432,31 @@ def _create_wave_from_cut_multiple(self, wav_file, segments):
         'result': results
     }
 
+@shared_task(bind=True)
+def _create_wave_from_mp3(self, mp3_files):
+    full_mp3_files = [os.sep.join([DATA_DIR, file]) for file in mp3_files]
+    
+    results = []
+    for file in full_mp3_files:
+        wav_file_path = file.replace(".mp3", ".wav")
+        result = {
+            'mp3_file': file,
+            'wav_file': wav_file_path
+        }
+        try:
+            audio = AudioSegment.from_mp3(file)
+            audio.export(wav_file_path, format="wav") # Exports to a wav file in the mp3 file path.
+            result['status'] = 'SUCCEEDED'
+        except Exception as e:
+            result['status'] = 'ERROR'
+            result['error_message'] = str(e)
+
+        results.append(result)
+        
+    return {
+        'result': results
+    }
+
 
 @shared_task(bind=True)
 def _batch_thumbnail(self, thumbnail_dir_fullpath, videos, images):
