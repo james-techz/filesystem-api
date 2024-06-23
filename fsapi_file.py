@@ -3,7 +3,8 @@ from fsapi_utils import require_token, os_exception_handle, READ_CHUNK_BYTE, \
     DATA_DIR, ITEMTYPE, FORBIDDEN_DIR, \
     AHK_SERVER_PORT, AHK_SERVER_USER, AHK_SERVER
 from fsapi_utils import  _create_file_by_youtube_download, _create_file_by_mp3_concat, \
-    _create_wave_from_midi_sf, _create_wave_from_cut_multiple, _create_wave_from_cut, _batch_thumbnail
+    _create_wave_from_midi_sf, _create_wave_from_cut_multiple, _create_wave_from_cut, _batch_thumbnail, \
+    _create_wave_from_mp3
     
 from flask import request, Response
 from urllib.request import urlopen
@@ -405,6 +406,13 @@ class BatchWAVRequest(Resource):
                     return {"error_message": "'wav_file' or 'segments' not found or invalid"}, 400
             
             async_result = _create_wave_from_cut_multiple.delay(request.json['wav_file'], request.json['segments'])
+            return {"task_id": async_result.id}
+        elif action == 'from_mp3':
+            if 'mp3_files' not in request.json \
+                or not isinstance(request.json['mp3_files'], list):
+                    return {"error_message": "'mp3_files' not found or not a list"}, 400
+            
+            async_result = _create_wave_from_mp3.delay(request.json['mp3_files'])
             return {"task_id": async_result.id}
 
         else:
