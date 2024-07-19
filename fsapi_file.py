@@ -4,7 +4,7 @@ from fsapi_utils import require_token, os_exception_handle, READ_CHUNK_BYTE, \
     AHK_SERVER_PORT, AHK_SERVER_USER, AHK_SERVER
 from fsapi_utils import  _create_file_by_youtube_download, _create_file_by_mp3_concat, \
     _create_wave_from_midi_sf, _create_wave_from_cut_multiple, _create_wave_from_cut, _batch_thumbnail, \
-    _create_wave_from_mp3
+    _create_wave_from_mp3, _wav_fade, _wav_tempo_change, _wav_pitch_shift
     
 from flask import request, Response
 from urllib.request import urlopen
@@ -389,7 +389,41 @@ class WAVRequest(Resource):
 
             async_result = _create_wave_from_cut.delay(path, wav_file, from_time, to_time)
             return {"task_id": async_result.id}
+        elif action == "fade":
+            if 'wav_file' not in request.json \
+                or ('fade_in' not in request.json and 'fade_out' not in request.json):
+                return {"error_message": "'wav_file' and at least 'fade_in' or 'fade_out' must be specified"}, 400
+            
+            pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+            wav_file  = request.json['wav_file']
+            fade_in  = request.json.get('fade_in', 0)
+            fade_out  = request.json.get('fade_out', 0)
+            type  = request.json.get('type', 't')
 
+            async_result = _wav_fade.delay(path, wav_file, type, fade_in, fade_out)
+            return {"task_id": async_result.id}
+        elif action == "tempo_change":
+            if 'wav_file' not in request.json \
+                or 'tempo_change' not in request.json:
+                return {"error_message": "'wav_file' and 'tempo_change' must be specified"}, 400
+            
+            pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+            wav_file  = request.json['wav_file']
+            tempo_change  = request.json['tempo_change']
+
+            async_result = _wav_tempo_change.delay(path, wav_file, tempo_change)
+            return {"task_id": async_result.id}
+        elif action == "pitch_shift":
+            if 'wav_file' not in request.json \
+                or 'pitch_shift' not in request.json:
+                return {"error_message": "'wav_file' and 'pitch_shift' must be specified"}, 400
+            
+            pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+            wav_file  = request.json['wav_file']
+            pitch_shift  = request.json['pitch_shift']
+
+            async_result = _wav_pitch_shift.delay(path, wav_file, pitch_shift)
+            return {"task_id": async_result.id}
         else:
             return {"error_message": "'action' is not defined"}
         
