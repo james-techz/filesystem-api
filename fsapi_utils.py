@@ -457,6 +457,74 @@ def _create_wave_from_mp3(self, mp3_files):
         'result': results
     }
 
+@shared_task(bind=True)
+def _wav_fade(self, path, wav_file, type, fade_in, fade_out):
+    # fix the problem of grequests patching subprocess module
+    # by reloading the original subprocess module
+    import subprocess
+    import importlib
+    importlib.reload(subprocess)
+
+    full_path = os.path.sep.join([DATA_DIR, path])
+    full_wav_file_path = os.path.sep.join([DATA_DIR, wav_file])
+    wav_audio = AudioSegment.from_wav(full_wav_file_path)
+    wav_length_in_seconds = len(wav_audio) / 1000
+
+
+    completed_process = subprocess.run(["sox", full_wav_file_path, full_path, "fade", type, str(fade_in), str(wav_length_in_seconds), str(fade_out)], capture_output=True)
+    # sox _files/Free_Test_Data_5MB_MP3.wav _files/Free_Test_Data_5MB_MP3_fade_in.wav fade 1.0 28.5 1.5
+
+    return {
+        'path': path,
+        'type': ITEMTYPE.FILE,
+        'process_return_code':  completed_process.returncode,
+        'process_stdout': completed_process.stdout.decode('utf-8'),
+        'process_stderr': completed_process.stderr.decode('utf-8')
+    }
+
+@shared_task(bind=True)
+def _wav_tempo_change(self, path, wav_file, tempo_change):
+    # fix the problem of grequests patching subprocess module
+    # by reloading the original subprocess module
+    import subprocess
+    import importlib
+    importlib.reload(subprocess)
+
+    full_path = os.path.sep.join([DATA_DIR, path])
+    full_wav_file_path = os.path.sep.join([DATA_DIR, wav_file])
+
+    completed_process = subprocess.run(["sox", full_wav_file_path, full_path, "tempo", "-s", str(tempo_change)], capture_output=True)
+    # sox _files/Free_Test_Data_5MB_MP3.wav _files/Free_Test_Data_5MB_MP3_tempo_fast.wav tempo -s 1.5
+
+    return {
+        'path': path,
+        'type': ITEMTYPE.FILE,
+        'process_return_code':  completed_process.returncode,
+        'process_stdout': completed_process.stdout.decode('utf-8'),
+        'process_stderr': completed_process.stderr.decode('utf-8')
+    }
+
+@shared_task(bind=True)
+def _wav_pitch_shift(self, path, wav_file, pitch_shift):
+    # fix the problem of grequests patching subprocess module
+    # by reloading the original subprocess module
+    import subprocess
+    import importlib
+    importlib.reload(subprocess)
+
+    full_path = os.path.sep.join([DATA_DIR, path])
+    full_wav_file_path = os.path.sep.join([DATA_DIR, wav_file])
+
+    completed_process = subprocess.run(["sox", full_wav_file_path, full_path, "pitch", str(pitch_shift)], capture_output=True)
+    # sox _files/Free_Test_Data_5MB_MP3.wav _files/Free_Test_Data_5MB_MP3_pitch_higher.wav pitch 500
+
+    return {
+        'path': path,
+        'type': ITEMTYPE.FILE,
+        'process_return_code':  completed_process.returncode,
+        'process_stdout': completed_process.stdout.decode('utf-8'),
+        'process_stderr': completed_process.stderr.decode('utf-8')
+    }
 
 @shared_task(bind=True)
 def _batch_thumbnail(self, thumbnail_dir_fullpath, videos, images):
