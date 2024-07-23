@@ -4,7 +4,8 @@ from fsapi_utils import require_token, os_exception_handle, READ_CHUNK_BYTE, \
     AHK_SERVER_PORT, AHK_SERVER_USER, AHK_SERVER
 from fsapi_utils import  _create_file_by_youtube_download, _create_file_by_mp3_concat, \
     _create_wave_from_midi_sf, _create_wave_from_cut_multiple, _create_wave_from_cut, _batch_thumbnail, \
-    _create_wave_from_mp3, _wav_fade, _wav_tempo_change, _wav_pitch_shift
+    _create_wave_from_mp3, _wav_fade, _wav_tempo_change, _wav_pitch_shift, \
+    _wav_mp3_mix
     
 from flask import request, Response
 from urllib.request import urlopen
@@ -427,8 +428,23 @@ class WAVRequest(Resource):
 
             async_result = _wav_pitch_shift.delay(path, wav_file, pitch_shift)
             return {"task_id": async_result.id}
+        elif action == "mix":
+            if 'base_file' not in request.json \
+                or 'mix_file' not in request.json:
+                return {"error_message": "'base_file' and 'mix_file' must be specified"}, 400
+            
+            base_file = request.json['base_file']
+            mix_file = request.json['mix_file']
+            mix_start  = request.json.get('mix_start', 0.0)
+            mix_end  = request.json.get('mix_end', 0.0)
+            
+            pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+
+            async_result = _wav_mp3_mix.delay(path, base_file, mix_file, mix_start, mix_end)
+            return {"task_id": async_result.id}
         else:
             return {"error_message": "'action' is not defined"}
+
         
 class BatchWAVRequest(Resource):
     @require_token

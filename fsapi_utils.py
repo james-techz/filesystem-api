@@ -541,6 +541,33 @@ def _wav_pitch_shift(self, path, wav_file, pitch_shift):
     }
 
 @shared_task(bind=True)
+def _wav_mp3_mix(self, path, base_file, mix_file, mix_start, mix_end):
+    # fix the problem of grequests patching subprocess module
+    # by reloading the original subprocess module
+    import subprocess
+    import importlib
+    importlib.reload(subprocess)
+
+    full_path = os.path.sep.join([DATA_DIR, path])
+    full_base_file_path = os.path.sep.join([DATA_DIR, base_file])
+    full_mix_file_path = os.path.sep.join([DATA_DIR, mix_file])
+
+    completed_process = subprocess.run([
+        "sox", "-r 44100", "-m", full_base_file_path, 
+        f"|sox -r 44100 {full_mix_file_path} -p pad {mix_start} trim 0 {mix_end}",
+        full_path
+    ], capture_output=True)
+    # sox -r 44100 -m _files/Big_Buck_Bunny_1080_10s_5MB.mp3 "|sox -r 44100 _files/abc.wav -p pad 5 trim 0 15" _files/output.wav
+
+    return {
+        'path': path,
+        'type': ITEMTYPE.FILE,
+        'process_return_code':  completed_process.returncode,
+        'process_stdout': completed_process.stdout.decode('utf-8'),
+        'process_stderr': completed_process.stderr.decode('utf-8')
+    }
+
+@shared_task(bind=True)
 def _batch_thumbnail(self, thumbnail_dir_fullpath, videos, images):
 
     def _download_file(dir_full_path, url):
