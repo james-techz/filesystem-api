@@ -410,8 +410,11 @@ class WAVRequest(Resource):
             pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
             wav_file  = request.json['wav_file']
             tempo_change  = request.json['tempo_change']
+            profile  = request.json.get('profile', 'music')
+            sample_rate  = request.json.get('sample_rate', 44100)
+            bw = request.json.get('bandwidth', 90)
 
-            async_result = _wav_tempo_change.delay(path, wav_file, tempo_change)
+            async_result = _wav_tempo_change.delay(path, wav_file, tempo_change, profile, sample_rate, bw)
             return {"task_id": async_result.id}
         elif action == "pitch_shift":
             if 'wav_file' not in request.json \

@@ -483,7 +483,7 @@ def _wav_fade(self, path, wav_file, type, fade_in, fade_out):
     }
 
 @shared_task(bind=True)
-def _wav_tempo_change(self, path, wav_file, tempo_change):
+def _wav_tempo_change(self, path, wav_file, tempo_change, profile, sample_rate, bw):
     # fix the problem of grequests patching subprocess module
     # by reloading the original subprocess module
     import subprocess
@@ -492,8 +492,22 @@ def _wav_tempo_change(self, path, wav_file, tempo_change):
 
     full_path = os.path.sep.join([DATA_DIR, path])
     full_wav_file_path = os.path.sep.join([DATA_DIR, wav_file])
+    profiles = {
+        "music": "-m",
+        "speech": "-s",
+        "linear": "-l",
+    }
+    if profile not in profiles:
+        profile_value = "-m"
+    else:
+        profile_value = profiles[profile]
 
-    completed_process = subprocess.run(["sox", full_wav_file_path, full_path, "tempo", "-s", str(tempo_change)], capture_output=True)
+    completed_process = subprocess.run([
+        "sox", 
+        full_wav_file_path, full_path, 
+        "tempo", profile_value, str(tempo_change),
+        "rate", "-v", "-a", "-b", str(bw), str(sample_rate)
+    ], capture_output=True)
     # sox _files/Free_Test_Data_5MB_MP3.wav _files/Free_Test_Data_5MB_MP3_tempo_fast.wav tempo -s 1.5
 
     return {
