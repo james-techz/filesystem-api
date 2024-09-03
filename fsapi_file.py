@@ -5,7 +5,7 @@ from fsapi_utils import require_token, os_exception_handle, READ_CHUNK_BYTE, \
 from fsapi_utils import  _create_file_by_youtube_download, _create_file_by_mp3_concat, \
     _create_wave_from_midi_sf, _create_wave_from_cut_multiple, _create_wave_from_cut, _batch_thumbnail, \
     _create_wave_from_mp3, _wav_fade, _wav_tempo_change, _wav_pitch_shift, \
-    _wav_mp3_mix
+    _wav_mp3_mix, _dj_scratch_generate
     
 from flask import request, Response
 from urllib.request import urlopen
@@ -441,6 +441,21 @@ class WAVRequest(Resource):
             pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
 
             async_result = _wav_mp3_mix.delay(path, base_file, mix_file, mix_start, mix_end)
+            return {"task_id": async_result.id}
+        elif action == "dj_scratch":
+            if 'input_file' not in request.json \
+                or 'scratch_data' not in request.json:
+                return {"error_message": "'input_file' and 'scratch_data' must be specified"}, 400
+            
+            input_file = request.json['input_file']
+            scratch_data = request.json['scratch_data']
+
+            if not isinstance(scratch_data, list):
+                return {"error_message": "'scratch_data' must be a list of strings"}, 400
+            
+            pathlib.Path(full_path).parent.mkdir(parents=True, exist_ok=True)
+
+            async_result = _dj_scratch_generate.delay(path, input_file, scratch_data)
             return {"task_id": async_result.id}
         else:
             return {"error_message": "'action' is not defined"}
