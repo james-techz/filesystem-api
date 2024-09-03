@@ -10,6 +10,7 @@ from pydub import AudioSegment
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 from moviepy.video.fx.fadein import fadein
 from moviepy.video.fx.fadeout import fadeout
+import uuid
 
 from urllib.request import urlopen
 import cv2
@@ -566,6 +567,78 @@ def _wav_mp3_mix(self, path, base_file, mix_file, mix_start, mix_end):
         'process_stdout': completed_process.stdout.decode('utf-8'),
         'process_stderr': completed_process.stderr.decode('utf-8')
     }
+
+
+@shared_task(bind=True)
+def _dj_scratch_generate(self, path, input_file, scratch_data):
+    # fix the problem of grequests patching subprocess module
+    # by reloading the original subprocess module
+    import subprocess
+    import importlib
+    importlib.reload(subprocess)
+
+    full_path = os.path.sep.join([DATA_DIR, path])
+    full_input_file_path = os.path.sep.join([DATA_DIR, input_file])
+    tmp_dir_fullpath = os.path.sep.join([DATA_DIR, uuid.uuid4().hex.upper()[0:6]])
+    pathlib.Path(tmp_dir_fullpath).mkdir(parents=True, exist_ok=True)
+
+    for index, params_str in enumerate(scratch_data):
+        params = params_str.split(" ")
+        command, start, end = params[0], params[1], params[2] 
+        tmp_file = os.path.sep.join([tmp_dir_fullpath, f"{index}.wav"])
+
+        if command == "silence":
+            completed_process = subprocess.run([
+                "sox", "-r 44100", "-c 2", "-n", tmp_file, "trim", start, end
+            ], capture_output=True)
+
+            if completed_process.returncode != 0:
+                return {
+                    'path': path,
+                    'type': ITEMTYPE.FILE,
+                    'process_return_code':  completed_process.returncode,
+                    'process_stdout': completed_process.stdout.decode('utf-8'),
+                    'process_stderr': completed_process.stderr.decode('utf-8')
+                }
+            
+        elif command in ["forward", "reverse"]:
+            speed = params[3] if len(params) == 4 else 1.0
+
+            if command == "reverse":
+                completed_process = subprocess.run([
+                    "sox", "-r 44100", "-c 2", full_input_file_path, tmp_file, "trim", start, end, "reverse", "speed", speed
+                ], capture_output=True)
+            else:
+                completed_process = subprocess.run([
+                    "sox", "-r 44100", "-c 2", full_input_file_path, tmp_file, "trim", start, end, "speed", speed
+                ], capture_output=True)
+        
+            if completed_process.returncode != 0:
+                return {
+                    'path': path,
+                    'type': ITEMTYPE.FILE,
+                    'process_return_code':  completed_process.returncode,
+                    'process_stdout': completed_process.stdout.decode('utf-8'),
+                    'process_stderr': completed_process.stderr.decode('utf-8')
+                }
+    
+    # combine all the temp files
+    final_completed_process = subprocess.run(
+        ["sox"] + [os.path.sep.join([tmp_dir_fullpath, f"{index}.wav"]) for index in range(len(scratch_data))] + [full_path], 
+        capture_output=True
+    )
+
+    # clean up temp files
+    shutil.rmtree(tmp_dir_fullpath)
+
+    return {
+        'path': path,
+        'type': ITEMTYPE.FILE,
+        'process_return_code':  final_completed_process.returncode,
+        'process_stdout': final_completed_process.stdout.decode('utf-8'),
+        'process_stderr': final_completed_process.stderr.decode('utf-8')
+    }
+
 
 @shared_task(bind=True)
 def _batch_thumbnail(self, thumbnail_dir_fullpath, videos, images):
