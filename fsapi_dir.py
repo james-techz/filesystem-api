@@ -162,6 +162,32 @@ class Directory(Resource):
                     break
                 counter += 1
         return self.get(path)
+    
+    def _create_dir_by_content_split(self, path):
+        
+        full_path = os.path.sep.join([DATA_DIR, path])
+        os.makedirs(full_path, exist_ok=True)
+        # extract size_limit, file_path, file_name, file extension
+        content = request.get_data(as_text=True).splitlines()
+
+        # line separator: >>>filename: 
+        file_separator_token = '>>>filename:'
+        
+        file_dict = {}
+        filename = ""
+        for line in content:
+            if line[:12] == file_separator_token:
+                filename = line[12:].strip()
+                file_dict[filename] = ""
+            elif filename != "":
+                file_dict[filename] += line + os.linesep
+
+        # start reading and writing files
+        for filename in file_dict.keys():
+            with open(os.sep.join([full_path, filename]), 'w') as f:
+                f.write(file_dict[filename])
+            
+        return self.get(path)
 
     def _create_dir_by_extract_video(self, path):
         if request.json['file_path'] == None or request.json['time_interval'] == None:
@@ -272,6 +298,8 @@ class Directory(Resource):
             return self._create_dir_by_multiple_scrape(path)
         elif action == 'split':
             return self._create_dir_by_split(path)
+        elif action == 'content_split':
+            return self._create_dir_by_content_split(path)
         elif action == 'video_extract':
             return self._create_dir_by_extract_video(path)
         else:
