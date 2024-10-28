@@ -189,6 +189,64 @@ class Directory(Resource):
             
         return self.get(path)
 
+    
+
+    def _create_dir_by_content_split_by_comment(self, path: str):
+        
+        # detect if the line is the comment to split code files
+        def _detect_file_splitting_line(line: str, token: str, suffixes: str):
+            parts = line.split()
+            # the format must be in `// <path>`
+            if len(parts) != 2 or parts[0] != token:
+                return False, None
+            else:
+                path = parts[1]
+                file_extension = path.split(sep='.')[-1]
+                if file_extension in suffixes:
+                    return True, path
+                else:
+                    return False, None
+
+        suffixes = request.args['suffixes'] if 'suffixes' in request.args else None
+        token = '//'
+        content = request.get_data(as_text=True).splitlines()
+
+        if suffixes is None:
+            return {"error_message": "'suffixes' must be defined"}, 400
+        else:
+            suffixes = suffixes.lower().split(',')
+            if len(suffixes) == 0:
+                return {"error_message": "'suffixes' must be non-empty"}, 400
+        full_path = os.path.sep.join([DATA_DIR, path])
+        os.makedirs(full_path, exist_ok=True)
+        
+        file_dict = {}
+        filepath = ""
+        for line in content:
+            file_splitting_line_detected, filepath_tmp = _detect_file_splitting_line(line, token, suffixes)
+            # start a new file
+            # this code will overwrite existing content if it encounter the file with the same name
+            if file_splitting_line_detected:
+                filepath = filepath_tmp
+                file_dict[filepath] = ""
+            # append to the current file in the dict
+            elif filepath != "":
+                file_dict[filepath] += line + os.linesep
+
+        # start reading and writing files
+        for filepath in file_dict.keys():
+            # make sure to create parent directories before writing files
+            file_full_path = os.path.sep.join([full_path, filepath])
+            pathlib.Path(file_full_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(file_full_path, 'w') as f:
+                f.write(file_dict[filepath])
+            
+        response = {
+            'path': path,
+            'sub_files': [filepath for filepath in file_dict.keys()]
+        }
+        return response
+
     def _create_dir_by_extract_video(self, path):
         if request.json['file_path'] == None or request.json['time_interval'] == None:
             return None, 400
@@ -300,6 +358,8 @@ class Directory(Resource):
             return self._create_dir_by_split(path)
         elif action == 'content_split':
             return self._create_dir_by_content_split(path)
+        elif action == 'content_split_by_comment':
+            return self._create_dir_by_content_split_by_comment(path)
         elif action == 'video_extract':
             return self._create_dir_by_extract_video(path)
         else:
