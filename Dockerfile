@@ -1,5 +1,5 @@
 ### BASE STAGE ###
-FROM python:3.8.18-slim-bullseye AS base-stage
+FROM python:3.10.19-slim AS base-stage
 # Keeps Python from generating .pyc files in the container
 # ENV PYTHONDONTWRITEBYTECODE=1
 # Turns off buffering for easier container logging
@@ -9,7 +9,7 @@ RUN mkdir /app && adduser -u 1000 --disabled-password --gecos "" appuser && chow
 
 ### BASE-DEPLOY STAGE ###
 FROM base-stage AS base-deploy-stage
-RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install openssh-client git net-tools procps ffmpeg fluidsynth \
+RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install openssh-client git net-tools procps ffmpeg fluidsynth curl unzip \
     sox libsox-fmt-all  -y
 
 
@@ -31,8 +31,10 @@ RUN --mount=type=cache,target=/home/appuser/.cache/pip,uid=1000,gid=1000 python3
 ### DEPLOY STAGE ###
 FROM base-deploy-stage as deploy-stage
 USER appuser
+# Install deno as required by yt-dlp
+RUN curl -fsSL https://deno.land/install.sh | sh -s -- -y
 # Copy pre-built python environment
-COPY --from=build-stage /home/appuser/.local /home/appuser/.local
+COPY --from=build-stage --chown=1000:1000 /home/appuser/.local /home/appuser/.local
 # Copy code
 COPY *.py *.conf *.txt *.sh Dockerfile /app/
 WORKDIR /app
