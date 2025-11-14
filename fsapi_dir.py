@@ -1,15 +1,16 @@
-import grequests
 from flask_restful import Resource, request
 from fsapi_utils import *
 from flask import request, Response
 from urllib.request import urlopen
 from bs4 import BeautifulSoup, ResultSet
-import requests_cache
 import requests
 import os
 from pywebcopy import save_webpage
 import cv2
 from pathlib import Path
+import asyncio
+import aiohttp
+import aiofiles
 
 
 class Directory(Resource):
@@ -66,6 +67,7 @@ class Directory(Resource):
                                 href = url + '/' + href
                         # separate directories vs files into each set
                         if href[-1] == '/':
+                            print(f'Adding {href} to page_set')
                             page_set.add(href)
                         else:
                             item_set.add(href)
@@ -76,34 +78,34 @@ class Directory(Resource):
             url = page_set.pop()
             _get_links_per_page(url)
 
-        def exception_request(request, exception):
-            print(f"{request.url}: {exception}")
+        async def download_item(session, url):
+            """Download one item asynchronously"""                        
+            async with session.get(url) as resp:
+                filepath = str(resp.url).replace(root_url, '')
+                splits = [part for part in filepath.split('/') if part != '']
+                if len(splits) < 1:
+                    print(f'Cannot determine filename from the URL: {resp.url}')
+                    return resp
+                
+                if resp.status == 200:                    
+                    parent_path = splits[:-1]
+                    os.makedirs(os.sep.join([full_path] + parent_path), exist_ok=True)
+                    full_name = os.path.sep.join([full_path] + splits)
+                    print(f'Downloading {url} to {full_name}')
+                    async with aiofiles.open(full_name, 'wb') as f:
+                        await f.write(await resp.read())
+                else:
+                    print(f'Error code {resp.status} getting URL: {resp.url}')
 
-        def response_callback(response: Response, *args, **kwargs):
-            filepath = str(response.url).replace(root_url, '')
-            splits = [part for part in filepath.split('/') if part != '']
-            if len(splits) < 1:
-                print(f'Cannot determine filename from the URL: {response.url}')
-                return response
-                                
-            if response.status_code == 200:
-                parent_path = splits[:-1]
-                os.makedirs(os.sep.join([full_path] + parent_path), exist_ok=True)
-                full_name = os.path.sep.join([full_path] + splits)
-                with open(full_name, 'wb') as f:
-                    f.write(response.content)
-            else:
-                print(f'Error code {response.status_code} getting URL: {response.url}')
+                return resp
 
-            return response
 
-        # smultaneously get the links to speed up
-        session = requests_cache.CachedSession(cache_name='my_cache')
-        results = grequests.map(
-            (grequests.get(u, session=session, callback=response_callback) for u in item_set),
-            exception_handler=exception_request,
-            size=10,
-        )
+        async def download_items():
+            async with aiohttp.ClientSession() as session:
+                tasks = [download_item(session, url) for url in item_set]
+                await asyncio.gather(*tasks)
+
+        asyncio.run(download_items())
 
         return {
             'path': path,
@@ -295,36 +297,31 @@ class Directory(Resource):
         
         results = []
 
-        def exception_request(request, exception):
-            result = {
-                'url': request.url
-            }
-            result['status'] = 'ERROR'
-            result['error_message'] = exception
-            results.append(result)
+        async def download_item(session, url):
+            """Download one item asynchronously"""                        
+            async with session.get(url) as resp:
+                filename = str(resp.url).split("/")[-1]
+                full_filename = os.sep.join([full_path, filename])
+                result = {
+                    'url': f'{resp.url.host}{resp.url.path}'
+                }
+                if resp.status == 200:
+                    async with aiofiles.open(full_filename, 'wb') as f:
+                        await f.write(await resp.read())
+                    result['status'] = 'SUCCESS'                
+                else:
+                    result['status'] = 'ERROR'
+                    result['error_message'] = f'{resp.url}: {resp.status}'
+                
+                results.append(result)                
+                return resp
 
-        def response_callback(response: Response, *args, **kwargs):
-            filename = str(response.url).split("/")[-1]
-            full_filename = os.sep.join([full_path, filename])
-            result = {
-                'url': response.url
-            }
+        async def download_items():
+            async with aiohttp.ClientSession() as session:
+                tasks = [download_item(session, url) for url in urls]
+                await asyncio.gather(*tasks)
 
-            if response.status_code == 200:
-                with open(full_filename, 'wb') as f:
-                    f.write(response.content)
-                result['status'] = 'SUCCESS'
-            else:
-                result['status'] = 'ERROR'
-                result['error_message'] = f'{response.url}: {response.status_code}'
-            results.append(result)
-
-        # smultaneously get the links to speed up
-        grequests.map(
-            (grequests.get(u, callback=response_callback) for u in urls),
-            exception_handler=exception_request,
-            size=10,
-        )
+        asyncio.run(download_items())
 
         return {
             "results": results

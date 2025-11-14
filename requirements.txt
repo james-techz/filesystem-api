@@ -3,19 +3,20 @@ Flask==2.3.3
 PyJWT==2.8.0
 beautifulsoup4==4.12.2
 celery==5.4.0
-grequests==0.7.0
 gunicorn==21.2.0
 lxml==4.9.3
-moviepy==1.0.3
-numpy==1.19.5
+moviepy==2.2.1
+numpy==1.25.0
 opencv-python-headless==4.8.0.76
 pretty-midi==0.2.10
 pydub==0.25.1
-pytube==15.0.0
 pywebcopy==7.0.2
 rabbitmq==0.2.0
 redis==5.0.0
 requests-cache==1.1.0
-requests==2.31.0
+requests==2.32.2
 scipy==1.10.1
-urllib3==1.26.16
+urllib3==1.26.17
+aiohttp==3.13.2
+aiofiles==25.1.0
+yt-dlp @ git+https://github.com/yt-dlp/yt-dlp@10dea209d2460daf924c93835ddc2f0301cf2cd4

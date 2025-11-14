@@ -1,15 +1,15 @@
-import grequests
+import subprocess
 import os
 from urllib.error import HTTPError
 from flask import request
 import jwt
-from pytube import YouTube, Stream
+from yt_dlp import YoutubeDL
 from celery import shared_task
 import json
 from pydub import AudioSegment
-from moviepy.editor import VideoFileClip, concatenate_videoclips
-from moviepy.video.fx.fadein import fadein
-from moviepy.video.fx.fadeout import fadeout
+from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy.video.fx.FadeIn import FadeIn
+from moviepy.video.fx.FadeOut import FadeOut
 import uuid
 
 from urllib.request import urlopen
@@ -125,49 +125,59 @@ def _create_file_by_youtube_download(self, path, request_json):
     url = request_json['url']
     min_res = int(request_json['min_res'])
 
-    def on_youtube_download_progress(stream: Stream, chunk: bytes, bytes_remaining: int):
-        filesize_bytes = stream.filesize
-        self.update_state(state='PROGRESS', meta={
-            'total_bytes': filesize_bytes,
-            'bytes_remaining': bytes_remaining,
-            'progress': round((filesize_bytes - bytes_remaining) / filesize_bytes, 2)
-        })
-        
-    # read available streams  for the video
-    streams = YouTube(
-            url=url,
-            on_progress_callback=on_youtube_download_progress
-        ).streams \
-        .filter(progressive=True) \
-        .order_by('resolution')
-    # download the smallest stream which satisfy minimal resolution
-    available_res = []
-    for _stream in streams:
-        _stream_res = int(_stream.resolution[:-1])
-        available_res.append(_stream_res)
-        if _stream_res >= min_res:
-            _stream.download(
-                output_path=os.path.dirname(full_path),
-                filename=os.path.basename(full_path),
-            )
-            return {
-                'path': path,
-                'type': ITEMTYPE.FILE,
-            }
-    
-    # if there's no stream satisfing the filter condition
-    return json.dumps({'error_message': f'Resolution resquested not found. Requested >= {min_res}. Available: {available_res}'})
+    def on_youtube_download_progress(d):
+        if d['status'] == 'finished':
+            return
+        elif d['status'] == 'error':
+            self.update_state(state='PROGRESS', meta={
+                'path': d['filename'],
+                'total_bytes': d['total_bytes'],
+                'bytes_remaining': int(d['total_bytes']) - int(d['downloaded_bytes']),
+                'progress': None,
+                'error_message': 'Downloading failed. Please check the celery logs',
+            })
+        else:
+            self.update_state(state='PROGRESS', meta={
+                'path': d['filename'],
+                'total_bytes': d['total_bytes'],
+                'bytes_remaining': int(d['total_bytes']) - int(d['downloaded_bytes']),
+                'progress': round(int(d['downloaded_bytes']) / int(d['total_bytes']), 2),
+            })
 
+    def on_youtube_download_finish(d):   
+        current_meta = self.backend.get_task_meta(self.request.id)['result']
+        current_meta['path'] = d['info_dict']['filepath']
+        self.update_state(state='SUCCESS', meta=current_meta)
+        
+    ret_code = 0
+
+    with YoutubeDL(params={
+        "verbose": "true",
+        "remote_components": ["ejs:npm"],
+        "outtmpl": full_path,
+        "format": f"bv[height>={min_res}]+ba/b",
+        "format_sort": ["+res"],
+        "format_sort_force": True,
+        "overwrites": True,
+        "progress_hooks": [on_youtube_download_progress],
+        "postprocessor_hooks": [on_youtube_download_finish],
+    }) as ydl:
+        info = ydl.extract_info(url, download=False)
+        file_path = ydl.prepare_filename(info)
+        ret_code = ydl.process_info(info)
+
+    if ret_code == 0:
+        return {
+            'path': file_path,
+            'type': ITEMTYPE.FILE
+        }
+    else:
+        return json.dumps({'error_message': f'Downloading failed. Please check the celery logs'})
 
 
 
 @shared_task(bind=True)
 def _create_file_by_mp3_concat(self, path, request_json):
-    # fix the problem of grequests patching subprocess module
-    # by reloading the original subprocess module
-    import subprocess
-    import importlib
-    importlib.reload(subprocess)
 
     full_path = os.path.sep.join([DATA_DIR, path])
     if 'files' not in request_json:
@@ -216,7 +226,7 @@ def _split_by_interval(self, request_json):
         while start_time <= total_duration:
             if end_time > total_duration:
                 end_time = total_duration
-            clip = video.subclip(start_time, end_time)
+            clip = video.subclipped(start_time, end_time)
             clip_name = f'{shortname}-{"%04d" % (iteration,)}{ext}'
             clip_names.append(clip_name)
             clip_path = os.path.sep.join([target_directory, clip_name])
@@ -273,7 +283,11 @@ def _concat_video_files(self, request_json):
                 concat_method = "compose"
 
             try:
-                video_clips = [fadeout(fadein(VideoFileClip(file_path), fadein_duration), fadeout_duration) for file_path in source_file_paths]
+                video_clips = [
+                    VideoFileClip(file_path).with_effects([FadeIn(duration=fadein_duration), FadeOut(duration=fadeout_duration)])
+                    for file_path in source_file_paths
+                ]
+
                 final_clip = concatenate_videoclips(video_clips, method = concat_method)
                 final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
                 for clip in video_clips: 
@@ -320,7 +334,10 @@ def _concat_video_files(self, request_json):
             concat_method = "compose"
 
         try:
-            video_clips = [fadeout(fadein(VideoFileClip(file_path), fadein_duration), fadeout_duration) for file_path in source_file_paths]
+            video_clips = [
+                VideoFileClip(file_path).with_effects([FadeIn(duration=fadein_duration), FadeOut(duration=fadeout_duration)])
+                for file_path in source_file_paths
+            ]
             final_clip = concatenate_videoclips(video_clips, method = concat_method)
             final_clip.write_videofile(target_file_path, audio=True, audio_codec='aac')
             for clip in video_clips: 
@@ -369,11 +386,6 @@ def _extract_mp3_from_video(self, request_json):
 
 @shared_task(bind=True)
 def _create_wave_from_midi_sf(self, path, midi_file, sf_file):
-    # fix the problem of grequests patching subprocess module
-    # by reloading the original subprocess module
-    import subprocess
-    import importlib
-    importlib.reload(subprocess)
 
     full_path = os.path.sep.join([DATA_DIR, path])
     full_midi_path = os.path.sep.join([DATA_DIR, midi_file])
@@ -460,12 +472,6 @@ def _create_wave_from_mp3(self, mp3_files):
 
 @shared_task(bind=True)
 def _wav_fade(self, path, wav_file, type, fade_in, fade_out):
-    # fix the problem of grequests patching subprocess module
-    # by reloading the original subprocess module
-    import subprocess
-    import importlib
-    importlib.reload(subprocess)
-
     full_path = os.path.sep.join([DATA_DIR, path])
     full_wav_file_path = os.path.sep.join([DATA_DIR, wav_file])
     wav_audio = AudioSegment.from_wav(full_wav_file_path)
@@ -485,12 +491,6 @@ def _wav_fade(self, path, wav_file, type, fade_in, fade_out):
 
 @shared_task(bind=True)
 def _wav_tempo_change(self, path, wav_file, tempo_change, profile, sample_rate, bw):
-    # fix the problem of grequests patching subprocess module
-    # by reloading the original subprocess module
-    import subprocess
-    import importlib
-    importlib.reload(subprocess)
-
     full_path = os.path.sep.join([DATA_DIR, path])
     full_wav_file_path = os.path.sep.join([DATA_DIR, wav_file])
     profiles = {
@@ -521,11 +521,6 @@ def _wav_tempo_change(self, path, wav_file, tempo_change, profile, sample_rate, 
 
 @shared_task(bind=True)
 def _wav_pitch_shift(self, path, wav_file, pitch_shift):
-    # fix the problem of grequests patching subprocess module
-    # by reloading the original subprocess module
-    import subprocess
-    import importlib
-    importlib.reload(subprocess)
 
     full_path = os.path.sep.join([DATA_DIR, path])
     full_wav_file_path = os.path.sep.join([DATA_DIR, wav_file])
@@ -543,11 +538,6 @@ def _wav_pitch_shift(self, path, wav_file, pitch_shift):
 
 @shared_task(bind=True)
 def _wav_mp3_mix(self, path, base_file, mix_file, mix_start, mix_end):
-    # fix the problem of grequests patching subprocess module
-    # by reloading the original subprocess module
-    import subprocess
-    import importlib
-    importlib.reload(subprocess)
 
     full_path = os.path.sep.join([DATA_DIR, path])
     full_base_file_path = os.path.sep.join([DATA_DIR, base_file])
@@ -571,11 +561,6 @@ def _wav_mp3_mix(self, path, base_file, mix_file, mix_start, mix_end):
 
 @shared_task(bind=True)
 def _dj_scratch_generate(self, path, input_file, scratch_data):
-    # fix the problem of grequests patching subprocess module
-    # by reloading the original subprocess module
-    import subprocess
-    import importlib
-    importlib.reload(subprocess)
 
     full_path = os.path.sep.join([DATA_DIR, path])
     full_input_file_path = os.path.sep.join([DATA_DIR, input_file])

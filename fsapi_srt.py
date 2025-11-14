@@ -1,7 +1,5 @@
-import grequests
 from flask_restful import Resource, request
 from flask import request
-from bs4 import BeautifulSoup
 import os
 from fsapi_utils import require_token, os_exception_handle, DATA_DIR
 import pathlib

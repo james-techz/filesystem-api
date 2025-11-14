@@ -14,6 +14,7 @@ import os
 import pathlib
 import shutil
 import pretty_midi
+import subprocess
 
 class File(Resource):
 
@@ -499,9 +500,6 @@ class WaveForm(Resource):
             output_file_path = os.sep.join([DATA_DIR, request.json['output_file']])
             
             pathlib.Path(output_file_path).parent.mkdir(parents=True, exist_ok=True)
-            import subprocess
-            import importlib
-            importlib.reload(subprocess)
             completed_process = subprocess.run(['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-i', wav_file_path, '-filter_complex', 'showwavespic', '-frames:v', '1', output_file_path], capture_output=True)
             result = request.json
             if len(completed_process.stderr) > 0:
@@ -540,10 +538,6 @@ class AHKScript(Resource):
     @require_token
     @os_exception_handle
     def post(self):
-        import subprocess
-        import importlib
-        importlib.reload(subprocess)
-
         if 'files' not in request.json:
             return {"error_message": "'files' not found"}, 400
         
@@ -594,9 +588,6 @@ class AHKScript(Resource):
         return response, 200
     
     def _list(self, directory):
-        import subprocess
-        import importlib
-        importlib.reload(subprocess)
         directory = "" if directory is None else directory
         result = {}
         try:
@@ -643,9 +634,6 @@ class AHKScript(Resource):
         return response, 200
     
     def _get_file(self, filename):
-        import subprocess
-        import importlib
-        importlib.reload(subprocess)
         result = {}
         remote_path = f"{AHKScript.DATA_DIR}\\{filename}"
         local_path = os.sep.join([DATA_DIR, filename])
