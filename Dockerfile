@@ -40,5 +40,5 @@ COPY *.py *.conf *.txt *.sh Dockerfile /app/
 WORKDIR /app
 EXPOSE 5000
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-ENV PATH=$PATH:/home/appuser/.local/bin
+ENV PATH=$PATH:/home/appuser/.local/bin:/home/appuser/.deno/bin
 CMD ./start.sh
