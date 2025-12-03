@@ -145,9 +145,9 @@ def _create_file_by_youtube_download(self, path, request_json):
             })
 
     def on_youtube_download_finish(d):   
-        current_meta = self.backend.get_task_meta(self.request.id)['result']
-        current_meta['path'] = d['info_dict']['filepath']
-        self.update_state(state='SUCCESS', meta=current_meta)
+        if d['status'] == 'finished':
+            current_meta = self.backend.get_task_meta(self.request.id)['result']
+            self.update_state(state='SUCCESS', meta=current_meta)
         
     ret_code = 0
 
@@ -161,6 +161,7 @@ def _create_file_by_youtube_download(self, path, request_json):
         "overwrites": True,
         "progress_hooks": [on_youtube_download_progress],
         "postprocessor_hooks": [on_youtube_download_finish],
+        "merge_output_format": "mp4",
     }) as ydl:
         info = ydl.extract_info(url, download=False)
         file_path = ydl.prepare_filename(info)
