@@ -19,4 +19,4 @@ scipy==1.10.1
 urllib3==1.26.17
 aiohttp==3.13.2
 aiofiles==25.1.0
-yt-dlp @ git+https://github.com/yt-dlp/yt-dlp@10dea209d2460daf924c93835ddc2f0301cf2cd4
+yt-dlp @ git+https://github.com/yt-dlp/yt-dlp@b8058cdf378cbbf60669b665dea146fb7dc90117
