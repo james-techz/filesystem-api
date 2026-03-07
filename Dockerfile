@@ -36,7 +36,7 @@ RUN curl -fsSL https://deno.land/install.sh | sh -s -- -y
 # Copy pre-built python environment
 COPY --from=build-stage --chown=1000:1000 /home/appuser/.local /home/appuser/.local
 # Copy code
-COPY *.py *.conf *.txt *.sh Dockerfile /app/
+COPY --chown=1000:1000 *.py *.conf *.txt *.sh Dockerfile /app/
 WORKDIR /app
 EXPOSE 5000
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
