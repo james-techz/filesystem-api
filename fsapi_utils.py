@@ -162,6 +162,7 @@ def _create_file_by_youtube_download(self, path, request_json):
         "progress_hooks": [on_youtube_download_progress],
         "postprocessor_hooks": [on_youtube_download_finish],
         "merge_output_format": "mp4",
+        "cookiefile": 'youtube_cookie.txt'
     }) as ydl:
         info = ydl.extract_info(url, download=False)
         file_path = ydl.prepare_filename(info)
